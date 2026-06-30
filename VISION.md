@@ -7,8 +7,15 @@ Current accepted decisions:
 - MITMI should evolve from "Modbus In The Middle" toward the broader meaning "Man In The Middle".
 - Public and commercial positioning should still emphasize authorized industrial traffic mediation, diagnostics, testing, and replay rather than unauthorized interception.
 - v0.1 should primarily be a diagnostic proxy.
+- v0.1 should support one diagnostic session only.
 - v0.1 should be Modbus-aware from day one, while keeping Modbus-specific logic isolated in the Modbus protocol plugin.
 - NModbus is the accepted initial Modbus dependency, referenced only from the Modbus protocol project.
+- v0.1 diagnostic proxy mode means explicit in-path pass-through proxying, not passive packet sniffing.
+- v0.1 should log to both console and file, with independently configurable minimum levels.
+- v0.1 should enable captures by default, while clearly reporting the output path and warning about retention and sensitive data.
+- v0.1 should target engineer laptop deployment first, keeping install and runtime assumptions lightweight.
+- v0.1 requires clients to connect to MITMI's configured IP/port instead of the original PLC/server endpoint.
+- v0.1 should prefer minimum-latency forwarding, with diagnostic detail gathered asynchronously where practical.
 - Replay, fault simulation, caching, queuing, bridging, automation, and scripting remain important future directions, but they should not distract from proving that the diagnostic proxy works reliably first.
 
 ## 1. Vision
@@ -112,19 +119,25 @@ v0.1 should be intentionally narrow:
 
 - Console application.
 - Windows and Linux support.
+- Engineer laptop as the first deployment target.
 - JSON configuration.
 - Modbus TCP protocol plugin.
 - Modbus-aware request/response correlation and diagnostics from day one.
 - TCP listener and upstream target connection.
+- Explicit client retargeting to MITMI's configured IP/port.
 - Diagnostic proxy operation as the primary product experience.
 - Observe/pass-through mode.
+- Latency-first forwarding with asynchronous diagnostics.
 - Structured request/response logging.
+- Console and file logging with independent `Debug`, `Info`, `Warning`, and `Error` thresholds.
 - Basic capture file format.
+- Capture enabled by default with visible output path and retention warning.
 - Basic replay from recorded Modbus TCP transactions, treated as a secondary validation feature.
 - Basic metrics exposed through logs or a local metrics sink.
 - Clear diagnostics for startup, configuration, connection, and protocol errors.
 - Internal dependency injection.
 - Static plugin registration through composition.
+- One configured diagnostic session.
 
 Recommended exclusions from v0.1:
 
@@ -682,7 +695,7 @@ These should be answered before implementation begins:
 5. How exact must replay timing be in the first version?
 6. Should replay target the original server/client topology or a simulated endpoint?
 7. What level of configuration usability is expected for field engineers?
-8. Will MITMI usually run on an engineer laptop, an industrial PC, a server, or an edge gateway?
+8. Answered for v0.1: MITMI will target engineer laptops first. Later versions may target industrial PCs, servers, or edge gateways.
 9. Are there regulatory, safety, or customer IT constraints around storing traffic captures?
 10. Should Modbus RTU/Serial be the second protocol because of industrial relevance, or should MQTT/HTTP be second to validate architectural diversity?
 11. What limitations are acceptable in the Free edition?
@@ -765,3 +778,17 @@ MITMI v0.1 should be a .NET console-based, protocol-neutral mediation host with 
 This position is intentionally conservative. It protects the architecture from becoming a Modbus-specific tool while avoiding premature platform complexity.
 
 The accepted v0.1 product mode is diagnostic proxy first. Once the diagnostic proxy is running reliably, the next planning decision should be whether to deepen replay, add fault simulation, or start validating the plugin model with a second protocol.
+
+Additional v0.1 architecture detail is tracked in `docs/architecture/v0.1-diagnostic-proxy-architecture.md` and `docs/decisions/ADR-0002-v0.1-diagnostic-proxy.md`.
+
+Single-session scope for v0.1 is tracked in `docs/decisions/ADR-0003-single-session-v0.1.md`.
+
+Logging sink and level decisions for v0.1 are tracked in `docs/decisions/ADR-0004-logging-sinks-and-levels.md`.
+
+Capture defaults and retention warnings for v0.1 are tracked in `docs/decisions/ADR-0005-capture-defaults-and-retention-warnings.md`.
+
+Engineer laptop first deployment scope is tracked in `docs/decisions/ADR-0006-engineer-laptop-first-deployment.md`.
+
+Explicit client retargeting for v0.1 is tracked in `docs/decisions/ADR-0007-explicit-client-retargeting.md`.
+
+Latency-first forwarding and asynchronous diagnostics are tracked in `docs/decisions/ADR-0008-latency-first-forwarding.md`.
