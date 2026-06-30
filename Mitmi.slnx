@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Mitmi.Protocols.Modbus/Mitmi.Protocols.Modbus.csproj" />
+  </Folder>
+</Solution>
