@@ -1,6 +1,7 @@
 using Mitmi.Application.Configuration;
 using Mitmi.Application.Diagnostics;
 using Mitmi.Application.Protocols;
+using Mitmi.Application.Sessions;
 using Mitmi.Protocols.Modbus;
 
 namespace Mitmi.Host.Console;
@@ -95,8 +96,36 @@ public static class CommandLineHost
             return ExitCodes.Success;
         }
 
-        await output.WriteLineAsync("Configuration valid. Session startup is not implemented in this slice.");
-        return ExitCodes.Success;
+        await output.WriteLineAsync("Starting diagnostic session. Press Ctrl+C to stop.");
+        using var shutdown = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
+        {
+            eventArgs.Cancel = true;
+            shutdown.Cancel();
+        };
+
+        System.Console.CancelKeyPress += cancelHandler;
+        try
+        {
+            await new TcpDiagnosticSessionRunner().RunAsync(
+                validationResult.RuntimeConfiguration!,
+                new TextWriterSessionEventSink(output, error),
+                shutdown.Token);
+            return ExitCodes.Success;
+        }
+        catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+        {
+            return ExitCodes.Success;
+        }
+        catch (Exception exception)
+        {
+            await error.WriteLineAsync($"Runtime failure: {exception.Message}");
+            return ExitCodes.RuntimeFailure;
+        }
+        finally
+        {
+            System.Console.CancelKeyPress -= cancelHandler;
+        }
     }
 
     private static ProtocolRegistry BuildProtocolRegistry()

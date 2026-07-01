@@ -7,5 +7,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Mitmi.Application.Tests/Mitmi.Application.Tests.csproj" />
+    <Project Path="tests/Mitmi.IntegrationTests/Mitmi.IntegrationTests.csproj" />
   </Folder>
 </Solution>
