@@ -1,0 +1,41 @@
+{
+  "configurationVersion": 1,
+  "logging": {
+    "console": {
+      "enabled": true,
+      "minimumLevel": "Info"
+    },
+    "file": {
+      "enabled": true,
+      "minimumLevel": "Info",
+      "path": "./logs/mitmi.log"
+    }
+  },
+  "capture": {
+    "enabled": true,
+    "outputPath": "./captures",
+    "retention": {
+      "mode": "Manual"
+    }
+  },
+  "metrics": {
+    "enabled": true,
+    "sink": "Log"
+  },
+  "session": {
+    "id": "default",
+    "protocol": "modbus-tcp",
+    "listenEndpoint": {
+      "address": "0.0.0.0",
+      "port": 1502
+    },
+    "upstreamEndpoint": {
+      "address": "127.0.0.1",
+      "port": 502
+    },
+    "diagnostics": {
+      "decodeProtocol": true,
+      "captureRawPayloads": true
+    }
+  }
+}

@@ -8,4 +8,9 @@
   <ItemGroup>
     <PackageReference Include="NModbus" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mitmi.Application\Mitmi.Application.csproj" />
+    <ProjectReference Include="..\Mitmi.Domain\Mitmi.Domain.csproj" />
+  </ItemGroup>
 </Project>
