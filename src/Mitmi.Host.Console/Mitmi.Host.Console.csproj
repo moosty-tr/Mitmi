@@ -12,4 +12,8 @@
     <ProjectReference Include="..\Mitmi.Protocols.Modbus\Mitmi.Protocols.Modbus.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\examples\mitmi.config.example.json" LogicalName="Mitmi.Host.Console.DefaultConfigurationTemplate" />
+  </ItemGroup>
+
 </Project>

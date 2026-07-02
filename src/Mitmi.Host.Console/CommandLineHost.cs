@@ -10,6 +10,7 @@ namespace Mitmi.Host.Console;
 public static class CommandLineHost
 {
     private const string DefaultConfigurationFileName = "mitmi.config.json";
+    private const string DefaultConfigurationTemplateResourceName = "Mitmi.Host.Console.DefaultConfigurationTemplate";
 
     public static async Task<int> RunAsync(
         string[] args,
@@ -261,12 +262,11 @@ public static class CommandLineHost
                 FileShare.Read,
                 bufferSize: 4096,
                 useAsync: true);
-            await using var writer = new StreamWriter(file);
-            await writer.WriteAsync(DefaultConfigurationTemplate.AsMemory(), cancellationToken);
-            await writer.WriteAsync(Environment.NewLine.AsMemory(), cancellationToken);
+            await using var template = OpenDefaultConfigurationTemplate();
+            await template.CopyToAsync(file, cancellationToken);
             return true;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             RenderIssues(
                 error,
@@ -278,6 +278,13 @@ public static class CommandLineHost
                 ]);
             return false;
         }
+    }
+
+    private static Stream OpenDefaultConfigurationTemplate()
+    {
+        return typeof(CommandLineHost).Assembly.GetManifestResourceStream(DefaultConfigurationTemplateResourceName)
+            ?? throw new InvalidOperationException(
+                $"Embedded default configuration template '{DefaultConfigurationTemplateResourceName}' was not found.");
     }
 
     private static ProtocolRegistry BuildProtocolRegistry()
@@ -358,48 +365,4 @@ public static class CommandLineHost
         writer.WriteLine("  mitmi --init-config [--config <path>]");
         writer.WriteLine($"  Default config: {DefaultConfigurationFileName} beside the application executable.");
     }
-
-    private const string DefaultConfigurationTemplate = """
-        {
-          "configurationVersion": 1,
-          "logging": {
-            "console": {
-              "enabled": true,
-              "minimumLevel": "Info"
-            },
-            "file": {
-              "enabled": true,
-              "minimumLevel": "Info",
-              "path": "./logs/mitmi.log"
-            }
-          },
-          "capture": {
-            "enabled": true,
-            "outputPath": "./captures",
-            "retention": {
-              "mode": "Manual"
-            }
-          },
-          "metrics": {
-            "enabled": true,
-            "sink": "Log"
-          },
-          "session": {
-            "id": "default",
-            "protocol": "modbus-tcp",
-            "listenEndpoint": {
-              "address": "0.0.0.0",
-              "port": 1502
-            },
-            "upstreamEndpoint": {
-              "address": "127.0.0.1",
-              "port": 502
-            },
-            "diagnostics": {
-              "decodeProtocol": true,
-              "captureRawPayloads": true
-            }
-          }
-        }
-        """;
 }
