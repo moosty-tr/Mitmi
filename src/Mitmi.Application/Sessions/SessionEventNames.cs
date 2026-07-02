@@ -6,6 +6,8 @@ public static class SessionEventNames
     public const string CaptureSinkFailed = "capture.sink_failed";
     public const string ClientAccepted = "client.accepted";
     public const string ConnectionClosed = "connection.closed";
+    public const string DiagnosticsEventDropped = "diagnostics.event_dropped";
+    public const string DiagnosticsEventLossSummary = "diagnostics.event_loss_summary";
     public const string ForwardingStarted = "forwarding.started";
     public const string ListenerBindFailed = "listener.bind_failed";
     public const string ListenerStarted = "listener.started";

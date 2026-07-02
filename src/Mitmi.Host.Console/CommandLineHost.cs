@@ -115,10 +115,13 @@ public static class CommandLineHost
         System.Console.CancelKeyPress += cancelHandler;
         try
         {
-            await using var eventSink = new TextWriterSessionEventSink(
+            await using var textWriterEventSink = new TextWriterSessionEventSink(
                 output,
                 error,
                 validationResult.RuntimeConfiguration!.Logging);
+            await using var eventSink = new BoundedSessionEventSink(
+                textWriterEventSink,
+                validationResult.RuntimeConfiguration!.Session.Id);
             await using var captureSink = CreateTrafficCaptureSink(
                 validationResult.RuntimeConfiguration!,
                 eventSink);
