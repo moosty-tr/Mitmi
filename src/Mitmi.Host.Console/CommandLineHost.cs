@@ -130,8 +130,14 @@ public static class CommandLineHost
             var protocolTrafficObserverFactory = BuildProtocolTrafficObserverFactory(
                 validationResult.RuntimeConfiguration!,
                 eventSink);
+            var sessionMetricsSink = CreateSessionMetricsSink(
+                validationResult.RuntimeConfiguration!,
+                eventSink);
 
-            await new TcpDiagnosticSessionRunner(protocolTrafficObserverFactory, captureSink).RunAsync(
+            await new TcpDiagnosticSessionRunner(
+                protocolTrafficObserverFactory,
+                captureSink,
+                sessionMetricsSink).RunAsync(
                 validationResult.RuntimeConfiguration!,
                 eventSink,
                 shutdown.Token);
@@ -165,6 +171,18 @@ public static class CommandLineHost
             configuration.Capture,
             eventSink,
             DateTimeOffset.UtcNow);
+    }
+
+    private static ISessionMetricsSink? CreateSessionMetricsSink(
+        RuntimeConfiguration configuration,
+        ISessionEventSink eventSink)
+    {
+        if (!configuration.Metrics.Enabled)
+        {
+            return null;
+        }
+
+        return new SessionEventMetricsSink(eventSink);
     }
 
     private static string ResolveConfigurationPath(

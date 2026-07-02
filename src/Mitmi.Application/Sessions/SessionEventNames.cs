@@ -10,6 +10,9 @@ public static class SessionEventNames
     public const string ListenerBindFailed = "listener.bind_failed";
     public const string ListenerStarted = "listener.started";
     public const string ListenerStopped = "listener.stopped";
+    public const string MetricsConnectionSummary = "metrics.connection_summary";
+    public const string MetricsSessionSummary = "metrics.session_summary";
+    public const string MetricsSinkFailed = "metrics.sink_failed";
     public const string ProtocolDecodeWarning = "protocol.decode_warning";
     public const string ProtocolFrameDecoded = "protocol.frame_decoded";
     public const string ProtocolObserverFailed = "protocol.observer_failed";

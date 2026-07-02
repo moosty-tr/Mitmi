@@ -12,14 +12,17 @@ public sealed class TcpDiagnosticSessionRunner
 
     private readonly IProtocolTrafficObserverFactory? trafficObserverFactory;
     private readonly ITrafficCaptureSink? trafficCaptureSink;
+    private readonly ISessionMetricsSink? sessionMetricsSink;
     private long nextConnectionId;
 
     public TcpDiagnosticSessionRunner(
         IProtocolTrafficObserverFactory? trafficObserverFactory = null,
-        ITrafficCaptureSink? trafficCaptureSink = null)
+        ITrafficCaptureSink? trafficCaptureSink = null,
+        ISessionMetricsSink? sessionMetricsSink = null)
     {
         this.trafficObserverFactory = trafficObserverFactory;
         this.trafficCaptureSink = trafficCaptureSink;
+        this.sessionMetricsSink = sessionMetricsSink;
     }
 
     public async Task RunAsync(
@@ -31,6 +34,7 @@ public sealed class TcpDiagnosticSessionRunner
         ArgumentNullException.ThrowIfNull(eventSink);
 
         var session = configuration.Session;
+        var metricsCollector = sessionMetricsSink is null ? null : new SessionMetricsCollector(session.Id);
         var listenAddress = IPAddress.Parse(session.ListenEndpoint.Address);
         var listener = new TcpListener(listenAddress, session.ListenEndpoint.Port);
 
@@ -82,6 +86,8 @@ public sealed class TcpDiagnosticSessionRunner
                     client,
                     connectionId,
                     trafficCaptureSink,
+                    metricsCollector,
+                    sessionMetricsSink,
                     trafficObserverFactory?.Create(session.Id, connectionId),
                     eventSink,
                     cancellationToken);
@@ -99,6 +105,16 @@ public sealed class TcpDiagnosticSessionRunner
                 $"Stopped listening at {session.ListenEndpoint}.",
                 exception: null,
                 cancellationToken: CancellationToken.None);
+            if (metricsCollector is not null && sessionMetricsSink is not null)
+            {
+                await EmitSessionMetricsSummaryAsync(
+                    sessionMetricsSink,
+                    eventSink,
+                    session.Id,
+                    metricsCollector.CreateSummary(),
+                    CancellationToken.None);
+            }
+
             await EmitAsync(
                 eventSink,
                 SessionEventLevel.Info,
@@ -116,6 +132,8 @@ public sealed class TcpDiagnosticSessionRunner
         TcpClient client,
         ConnectionId connectionId,
         ITrafficCaptureSink? trafficCaptureSink,
+        SessionMetricsCollector? metricsCollector,
+        ISessionMetricsSink? sessionMetricsSink,
         IProtocolTrafficObserver? trafficObserver,
         ISessionEventSink eventSink,
         CancellationToken cancellationToken)
@@ -133,6 +151,7 @@ public sealed class TcpDiagnosticSessionRunner
             exception: null,
             cancellationToken);
 
+        var connectionMetrics = metricsCollector?.BeginConnection(connectionId);
         using var upstream = new TcpClient();
         try
         {
@@ -146,6 +165,7 @@ public sealed class TcpDiagnosticSessionRunner
             var level = cancellationToken.IsCancellationRequested
                 ? SessionEventLevel.Info
                 : SessionEventLevel.Error;
+            metricsCollector?.RecordUpstreamConnectionFailure();
             await EmitAsync(
                 eventSink,
                 level,
@@ -188,6 +208,7 @@ public sealed class TcpDiagnosticSessionRunner
             TrafficDirection.ClientToServer,
             configuration.Session.Diagnostics.CaptureRawPayloads,
             trafficCaptureSink,
+            connectionMetrics,
             trafficObserver,
             eventSink,
             connectionCts.Token);
@@ -200,6 +221,7 @@ public sealed class TcpDiagnosticSessionRunner
             TrafficDirection.ServerToClient,
             configuration.Session.Diagnostics.CaptureRawPayloads,
             trafficCaptureSink,
+            connectionMetrics,
             trafficObserver,
             eventSink,
             connectionCts.Token);
@@ -212,6 +234,17 @@ public sealed class TcpDiagnosticSessionRunner
 
         await ObserveForwardingCompletionAsync(clientToUpstream, cancellationToken);
         await ObserveForwardingCompletionAsync(upstreamToClient, cancellationToken);
+
+        if (metricsCollector is not null && sessionMetricsSink is not null && connectionMetrics is not null)
+        {
+            await EmitConnectionMetricsSummaryAsync(
+                sessionMetricsSink,
+                eventSink,
+                session.Id,
+                connectionId,
+                metricsCollector.CloseConnection(connectionMetrics),
+                CancellationToken.None);
+        }
 
         await EmitAsync(
             eventSink,
@@ -233,6 +266,7 @@ public sealed class TcpDiagnosticSessionRunner
         TrafficDirection direction,
         bool captureRawPayloads,
         ITrafficCaptureSink? trafficCaptureSink,
+        SessionMetricsCollector.ConnectionMetricsCollector? connectionMetrics,
         IProtocolTrafficObserver? trafficObserver,
         ISessionEventSink eventSink,
         CancellationToken cancellationToken)
@@ -249,6 +283,8 @@ public sealed class TcpDiagnosticSessionRunner
                 }
 
                 await destination.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+                connectionMetrics?.RecordForwarded(direction, bytesRead);
+
                 if (trafficCaptureSink is not null)
                 {
                     await CaptureTrafficAsync(
@@ -279,6 +315,61 @@ public sealed class TcpDiagnosticSessionRunner
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private static async ValueTask EmitConnectionMetricsSummaryAsync(
+        ISessionMetricsSink metricsSink,
+        ISessionEventSink eventSink,
+        SessionId sessionId,
+        ConnectionId connectionId,
+        ConnectionMetricsSummary summary,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await metricsSink.EmitConnectionSummaryAsync(summary, cancellationToken);
+        }
+        catch (Exception exception) when (
+            exception is not OperationCanceledException ||
+            !cancellationToken.IsCancellationRequested)
+        {
+            await EmitAsync(
+                eventSink,
+                SessionEventLevel.Warning,
+                SessionEventNames.MetricsSinkFailed,
+                sessionId,
+                connectionId,
+                $"Metrics sink failed while emitting connection summary: {exception.Message}",
+                exception,
+                cancellationToken);
+        }
+    }
+
+    private static async ValueTask EmitSessionMetricsSummaryAsync(
+        ISessionMetricsSink metricsSink,
+        ISessionEventSink eventSink,
+        SessionId sessionId,
+        SessionMetricsSummary summary,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await metricsSink.EmitSessionSummaryAsync(summary, cancellationToken);
+        }
+        catch (Exception exception) when (
+            exception is not OperationCanceledException ||
+            !cancellationToken.IsCancellationRequested)
+        {
+            await EmitAsync(
+                eventSink,
+                SessionEventLevel.Warning,
+                SessionEventNames.MetricsSinkFailed,
+                sessionId,
+                connectionId: null,
+                $"Metrics sink failed while emitting session summary: {exception.Message}",
+                exception,
+                cancellationToken);
         }
     }
 

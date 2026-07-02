@@ -135,6 +135,58 @@ public sealed class TcpDiagnosticSessionRunnerTests
     }
 
     [Fact]
+    public async Task RunAsync_emits_basic_metrics_for_forwarded_traffic()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var upstreamListener = new TcpListener(IPAddress.Loopback, 0);
+        upstreamListener.Start();
+        var upstreamPort = ((IPEndPoint)upstreamListener.LocalEndpoint).Port;
+        var listenPort = ReserveTcpPort();
+        var request = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+        var response = new byte[] { 0x10, 0x20, 0x30 };
+
+        var upstreamTask = AcceptOneExchangeAsync(upstreamListener, request.Length, response, timeout.Token);
+        var eventSink = new RecordingSessionEventSink();
+        var metricsSink = new RecordingSessionMetricsSink();
+        using var runnerCancellation = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
+        var runnerTask = new TcpDiagnosticSessionRunner(sessionMetricsSink: metricsSink).RunAsync(
+            CreateConfiguration(listenPort, upstreamPort, metricsEnabled: true),
+            eventSink,
+            runnerCancellation.Token);
+
+        await eventSink.WaitForAsync(SessionEventNames.ListenerStarted, timeout.Token);
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, listenPort, timeout.Token);
+        await client.GetStream().WriteAsync(request, timeout.Token);
+        var clientReceived = await ReadExactAsync(client.GetStream(), response.Length, timeout.Token);
+
+        Assert.Equal(request, await upstreamTask);
+        Assert.Equal(response, clientReceived);
+
+        client.Close();
+        var connectionSummary = await metricsSink.WaitForConnectionSummaryAsync(timeout.Token);
+        await eventSink.WaitForAsync(SessionEventNames.ConnectionClosed, timeout.Token);
+
+        await runnerCancellation.CancelAsync();
+        await runnerTask.WaitAsync(timeout.Token);
+        var sessionSummary = await metricsSink.WaitForSessionSummaryAsync(timeout.Token);
+
+        Assert.Equal(new SessionId("integration"), connectionSummary.SessionId);
+        Assert.Equal(request.Length, connectionSummary.ClientToServer.Bytes);
+        Assert.Equal(1, connectionSummary.ClientToServer.Chunks);
+        Assert.Equal(response.Length, connectionSummary.ServerToClient.Bytes);
+        Assert.Equal(1, connectionSummary.ServerToClient.Chunks);
+        Assert.True(connectionSummary.Duration >= TimeSpan.Zero);
+
+        Assert.Equal(1, sessionSummary.ConnectionsAccepted);
+        Assert.Equal(1, sessionSummary.ConnectionsClosed);
+        Assert.Equal(0, sessionSummary.UpstreamConnectionFailures);
+        Assert.Equal(request.Length, sessionSummary.ClientToServer.Bytes);
+        Assert.Equal(response.Length, sessionSummary.ServerToClient.Bytes);
+    }
+
+    [Fact]
     public async Task RunAsync_reports_upstream_connect_failure()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -186,7 +238,8 @@ public sealed class TcpDiagnosticSessionRunnerTests
         int listenPort,
         int upstreamPort,
         bool captureEnabled = false,
-        bool captureRawPayloads = false)
+        bool captureRawPayloads = false,
+        bool metricsEnabled = false)
     {
         return new RuntimeConfiguration(
             ConfigurationVersion: 1,
@@ -195,7 +248,7 @@ public sealed class TcpDiagnosticSessionRunnerTests
                 new LogSinkRuntimeOptions(true, ProductLogLevel.Info, null),
                 new LogSinkRuntimeOptions(false, ProductLogLevel.Info, null)),
             Capture: new CaptureRuntimeOptions(captureEnabled, Path.Combine(Path.GetTempPath(), "mitmi-captures"), CaptureRetentionMode.Manual),
-            Metrics: new MetricsRuntimeOptions(false, "Log"),
+            Metrics: new MetricsRuntimeOptions(metricsEnabled, "Log"),
             Session: new SessionRuntimeOptions(
                 new SessionId("integration"),
                 new ProtocolId("modbus-tcp"),
@@ -330,6 +383,85 @@ public sealed class TcpDiagnosticSessionRunnerTests
                 }
 
                 waitersForName.Add(waiter);
+            }
+
+            await using var registration = cancellationToken.Register(() => waiter.TrySetCanceled(cancellationToken));
+            return await waiter.Task;
+        }
+    }
+
+    private sealed class RecordingSessionMetricsSink : ISessionMetricsSink
+    {
+        private readonly object gate = new();
+        private ConnectionMetricsSummary? connectionSummary;
+        private SessionMetricsSummary? sessionSummary;
+        private TaskCompletionSource<ConnectionMetricsSummary>? connectionSummaryWaiter;
+        private TaskCompletionSource<SessionMetricsSummary>? sessionSummaryWaiter;
+
+        public ValueTask EmitConnectionSummaryAsync(
+            ConnectionMetricsSummary summary,
+            CancellationToken cancellationToken)
+        {
+            TaskCompletionSource<ConnectionMetricsSummary>? waiter;
+            lock (gate)
+            {
+                connectionSummary = summary;
+                waiter = connectionSummaryWaiter;
+                connectionSummaryWaiter = null;
+            }
+
+            waiter?.TrySetResult(summary);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask EmitSessionSummaryAsync(
+            SessionMetricsSummary summary,
+            CancellationToken cancellationToken)
+        {
+            TaskCompletionSource<SessionMetricsSummary>? waiter;
+            lock (gate)
+            {
+                sessionSummary = summary;
+                waiter = sessionSummaryWaiter;
+                sessionSummaryWaiter = null;
+            }
+
+            waiter?.TrySetResult(summary);
+            return ValueTask.CompletedTask;
+        }
+
+        public async Task<ConnectionMetricsSummary> WaitForConnectionSummaryAsync(
+            CancellationToken cancellationToken)
+        {
+            TaskCompletionSource<ConnectionMetricsSummary> waiter;
+            lock (gate)
+            {
+                if (connectionSummary is not null)
+                {
+                    return connectionSummary;
+                }
+
+                waiter = new TaskCompletionSource<ConnectionMetricsSummary>(TaskCreationOptions.RunContinuationsAsynchronously);
+                connectionSummaryWaiter = waiter;
+            }
+
+            await using var registration = cancellationToken.Register(() => waiter.TrySetCanceled(cancellationToken));
+            return await waiter.Task;
+        }
+
+        public async Task<SessionMetricsSummary> WaitForSessionSummaryAsync(
+            CancellationToken cancellationToken)
+        {
+            TaskCompletionSource<SessionMetricsSummary> waiter;
+            lock (gate)
+            {
+                if (sessionSummary is not null)
+                {
+                    return sessionSummary;
+                }
+
+                waiter = new TaskCompletionSource<SessionMetricsSummary>(TaskCreationOptions.RunContinuationsAsynchronously);
+                sessionSummaryWaiter = waiter;
             }
 
             await using var registration = cancellationToken.Register(() => waiter.TrySetCanceled(cancellationToken));
