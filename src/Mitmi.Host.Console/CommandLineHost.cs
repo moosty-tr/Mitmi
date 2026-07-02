@@ -41,21 +41,22 @@ public static class CommandLineHost
         }
 
         var configurationPath = ResolveConfigurationPath(options, applicationDirectory);
+        if (options.InitConfig)
+        {
+            return await InitializeConfigurationAsync(configurationPath, output, error, cancellationToken);
+        }
+
         if (!File.Exists(configurationPath))
         {
-            if (!await TryCreateDefaultConfigurationAsync(configurationPath, error, cancellationToken))
-            {
-                return ExitCodes.ConfigurationInvalid;
-            }
-
             RenderIssues(
-                output,
+                error,
                 [
-                    new ConfigurationIssue(
-                        ConfigurationIssueSeverity.Warning,
-                        ConfigurationIssueCodes.ConfigurationFileCreated,
-                        $"Configuration file '{configurationPath}' was not found, so a default one was created. Review endpoints before using MITMI with real devices.")
+                    new(
+                        ConfigurationIssueSeverity.Error,
+                        ConfigurationIssueCodes.MissingConfigurationFile,
+                        $"Configuration file '{configurationPath}' was not found. Run 'mitmi --init-config --config \"{configurationPath}\"' to create a template.")
                 ]);
+            return ExitCodes.ConfigurationInvalid;
         }
 
         string json;
@@ -161,6 +162,42 @@ public static class CommandLineHost
         }
     }
 
+    private static async Task<int> InitializeConfigurationAsync(
+        string configurationPath,
+        TextWriter output,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        if (File.Exists(configurationPath))
+        {
+            RenderIssues(
+                error,
+                [
+                    new ConfigurationIssue(
+                        ConfigurationIssueSeverity.Error,
+                        ConfigurationIssueCodes.ConfigurationFileExists,
+                        $"Configuration file '{configurationPath}' already exists. Refusing to overwrite it.")
+                ]);
+            return ExitCodes.ConfigurationInvalid;
+        }
+
+        if (!await TryCreateDefaultConfigurationAsync(configurationPath, error, cancellationToken))
+        {
+            return ExitCodes.ConfigurationInvalid;
+        }
+
+        RenderIssues(
+            output,
+            [
+                new ConfigurationIssue(
+                    ConfigurationIssueSeverity.Warning,
+                    ConfigurationIssueCodes.ConfigurationFileCreated,
+                    $"Configuration template '{configurationPath}' was created. Review endpoints before using MITMI with real devices.")
+            ]);
+        await output.WriteLineAsync($"Created configuration template at {configurationPath}.");
+        return ExitCodes.Success;
+    }
+
     private static NdjsonTrafficCaptureSink? CreateTrafficCaptureSink(
         RuntimeConfiguration configuration,
         ISessionEventSink eventSink)
@@ -217,7 +254,15 @@ public static class CommandLineHost
                 Directory.CreateDirectory(directory);
             }
 
-            await File.WriteAllTextAsync(configurationPath, DefaultConfigurationTemplate, cancellationToken);
+            await using var file = new FileStream(
+                configurationPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.Read,
+                bufferSize: 4096,
+                useAsync: true);
+            await using var writer = new StreamWriter(file);
+            await writer.WriteAsync(DefaultConfigurationTemplate.AsMemory(), cancellationToken);
             return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -309,6 +354,7 @@ public static class CommandLineHost
     {
         writer.WriteLine("Usage:");
         writer.WriteLine("  mitmi [--config <path>] [--validate-config]");
+        writer.WriteLine("  mitmi --init-config [--config <path>]");
         writer.WriteLine($"  Default config: {DefaultConfigurationFileName} beside the application executable.");
     }
 

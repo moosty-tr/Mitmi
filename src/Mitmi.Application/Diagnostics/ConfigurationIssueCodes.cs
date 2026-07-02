@@ -4,6 +4,7 @@ public static class ConfigurationIssueCodes
 {
     public const string CaptureManualRetention = "CAPTURE_MANUAL_RETENTION";
     public const string CaptureSensitiveData = "CAPTURE_SENSITIVE_DATA";
+    public const string ConfigurationFileExists = "CONFIGURATION_FILE_EXISTS";
     public const string ConfigurationFileCreated = "CONFIGURATION_FILE_CREATED";
     public const string DebugLoggingEnabled = "DEBUG_LOGGING_ENABLED";
     public const string EmptySessionId = "EMPTY_SESSION_ID";

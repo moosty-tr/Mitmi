@@ -5,12 +5,14 @@ internal sealed class CliOptions
     private CliOptions(
         string? configurationPath,
         bool hasExplicitConfigurationPath,
+        bool initConfig,
         bool validateConfig,
         bool showHelp,
         IReadOnlyList<string> errors)
     {
         ConfigurationPath = configurationPath;
         HasExplicitConfigurationPath = hasExplicitConfigurationPath;
+        InitConfig = initConfig;
         ValidateConfig = validateConfig;
         ShowHelp = showHelp;
         Errors = errors;
@@ -19,6 +21,8 @@ internal sealed class CliOptions
     public string? ConfigurationPath { get; }
 
     public bool HasExplicitConfigurationPath { get; }
+
+    public bool InitConfig { get; }
 
     public bool ValidateConfig { get; }
 
@@ -31,6 +35,7 @@ internal sealed class CliOptions
         var errors = new List<string>();
         string? configurationPath = null;
         var hasExplicitConfigurationPath = false;
+        var initConfig = false;
         var validateConfig = false;
         var showHelp = false;
 
@@ -46,6 +51,10 @@ internal sealed class CliOptions
 
                 case "--validate-config":
                     validateConfig = true;
+                    break;
+
+                case "--init-config":
+                    initConfig = true;
                     break;
 
                 case "--config":
@@ -65,6 +74,11 @@ internal sealed class CliOptions
             }
         }
 
-        return new CliOptions(configurationPath, hasExplicitConfigurationPath, validateConfig, showHelp, errors);
+        if (initConfig && validateConfig)
+        {
+            errors.Add("--init-config cannot be combined with --validate-config.");
+        }
+
+        return new CliOptions(configurationPath, hasExplicitConfigurationPath, initConfig, validateConfig, showHelp, errors);
     }
 }

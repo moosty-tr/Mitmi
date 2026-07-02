@@ -5,7 +5,28 @@ namespace Mitmi.IntegrationTests;
 public sealed class CommandLineHostConfigurationTests
 {
     [Fact]
-    public async Task RunAsync_without_config_parameter_creates_default_config_in_application_directory()
+    public async Task RunAsync_init_config_creates_default_config_in_application_directory()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        var exitCode = await CommandLineHost.RunAsync(
+            ["--init-config"],
+            output,
+            error,
+            applicationDirectory: tempDirectory.Path);
+
+        var defaultConfigPath = Path.Combine(tempDirectory.Path, "mitmi.config.json");
+        Assert.Equal(0, exitCode);
+        Assert.True(File.Exists(defaultConfigPath));
+        Assert.Contains("CONFIGURATION_FILE_CREATED", output.ToString());
+        Assert.Contains(defaultConfigPath, output.ToString());
+        Assert.Empty(error.ToString());
+    }
+
+    [Fact]
+    public async Task RunAsync_without_config_parameter_reports_missing_default_config()
     {
         using var tempDirectory = new TemporaryDirectory();
         using var output = new StringWriter();
@@ -18,12 +39,11 @@ public sealed class CommandLineHostConfigurationTests
             applicationDirectory: tempDirectory.Path);
 
         var defaultConfigPath = Path.Combine(tempDirectory.Path, "mitmi.config.json");
-        Assert.Equal(0, exitCode);
-        Assert.True(File.Exists(defaultConfigPath));
-        Assert.Contains("CONFIGURATION_FILE_CREATED", output.ToString());
-        Assert.Contains(defaultConfigPath, output.ToString());
-        Assert.Contains("Configuration valid.", output.ToString());
-        Assert.Empty(error.ToString());
+        Assert.NotEqual(0, exitCode);
+        Assert.False(File.Exists(defaultConfigPath));
+        Assert.Empty(output.ToString());
+        Assert.Contains("MISSING_CONFIGURATION_FILE", error.ToString());
+        Assert.Contains("--init-config", error.ToString());
     }
 
     [Fact]
@@ -49,7 +69,7 @@ public sealed class CommandLineHostConfigurationTests
     }
 
     [Fact]
-    public async Task RunAsync_creates_missing_explicit_config_path()
+    public async Task RunAsync_init_config_creates_missing_explicit_config_path()
     {
         using var tempDirectory = new TemporaryDirectory();
         using var output = new StringWriter();
@@ -57,7 +77,7 @@ public sealed class CommandLineHostConfigurationTests
         var explicitConfigPath = Path.Combine(tempDirectory.Path, "nested", "generated.config.json");
 
         var exitCode = await CommandLineHost.RunAsync(
-            ["--config", explicitConfigPath, "--validate-config"],
+            ["--init-config", "--config", explicitConfigPath],
             output,
             error,
             applicationDirectory: tempDirectory.Path);
@@ -67,6 +87,45 @@ public sealed class CommandLineHostConfigurationTests
         Assert.Contains("CONFIGURATION_FILE_CREATED", output.ToString());
         Assert.Contains(explicitConfigPath, output.ToString());
         Assert.Empty(error.ToString());
+    }
+
+    [Fact]
+    public async Task RunAsync_init_config_refuses_to_overwrite_existing_config()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var explicitConfigPath = Path.Combine(tempDirectory.Path, "mitmi.config.json");
+        await File.WriteAllTextAsync(explicitConfigPath, ValidConfigurationJson("existing"));
+
+        var exitCode = await CommandLineHost.RunAsync(
+            ["--init-config", "--config", explicitConfigPath],
+            output,
+            error,
+            applicationDirectory: tempDirectory.Path);
+
+        Assert.NotEqual(0, exitCode);
+        Assert.Empty(output.ToString());
+        Assert.Contains("CONFIGURATION_FILE_EXISTS", error.ToString());
+        Assert.Contains("Refusing to overwrite", error.ToString());
+    }
+
+    [Fact]
+    public async Task RunAsync_rejects_init_config_with_validate_config()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        var exitCode = await CommandLineHost.RunAsync(
+            ["--init-config", "--validate-config"],
+            output,
+            error,
+            applicationDirectory: tempDirectory.Path);
+
+        Assert.NotEqual(0, exitCode);
+        Assert.Empty(output.ToString());
+        Assert.Contains("--init-config cannot be combined with --validate-config.", error.ToString());
     }
 
     private static string ValidConfigurationJson(string sessionId) =>
