@@ -193,9 +193,10 @@ public sealed class TcpDiagnosticSessionRunnerTests
         var listenPort = ReserveTcpPort();
         var upstreamPort = ReserveTcpPort();
         var sink = new RecordingSessionEventSink();
+        var metricsSink = new RecordingSessionMetricsSink();
         using var runnerCancellation = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
-        var runnerTask = new TcpDiagnosticSessionRunner().RunAsync(
-            CreateConfiguration(listenPort, upstreamPort),
+        var runnerTask = new TcpDiagnosticSessionRunner(sessionMetricsSink: metricsSink).RunAsync(
+            CreateConfiguration(listenPort, upstreamPort, metricsEnabled: true),
             sink,
             runnerCancellation.Token);
 
@@ -205,11 +206,20 @@ public sealed class TcpDiagnosticSessionRunnerTests
         await client.ConnectAsync(IPAddress.Loopback, listenPort, timeout.Token);
 
         var failure = await sink.WaitForAsync(SessionEventNames.UpstreamConnectionFailed, timeout.Token);
+        var connectionSummary = await metricsSink.WaitForConnectionSummaryAsync(timeout.Token);
+        await sink.WaitForAsync(SessionEventNames.ConnectionClosed, timeout.Token);
 
         Assert.Equal(SessionEventLevel.Error, failure.Level);
+        Assert.Equal(0, connectionSummary.ClientToServer.Bytes);
+        Assert.Equal(0, connectionSummary.ServerToClient.Bytes);
 
         await runnerCancellation.CancelAsync();
         await runnerTask.WaitAsync(timeout.Token);
+        var sessionSummary = await metricsSink.WaitForSessionSummaryAsync(timeout.Token);
+
+        Assert.Equal(1, sessionSummary.ConnectionsAccepted);
+        Assert.Equal(1, sessionSummary.ConnectionsClosed);
+        Assert.Equal(1, sessionSummary.UpstreamConnectionFailures);
     }
 
     [Fact]

@@ -165,7 +165,11 @@ public sealed class TcpDiagnosticSessionRunner
             var level = cancellationToken.IsCancellationRequested
                 ? SessionEventLevel.Info
                 : SessionEventLevel.Error;
-            metricsCollector?.RecordUpstreamConnectionFailure();
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                metricsCollector?.RecordUpstreamConnectionFailure();
+            }
+
             await EmitAsync(
                 eventSink,
                 level,
@@ -177,6 +181,14 @@ public sealed class TcpDiagnosticSessionRunner
                 cancellationToken.IsCancellationRequested ? CancellationToken.None : cancellationToken);
             await DisposeProtocolTrafficObserverAsync(
                 trafficObserver,
+                eventSink,
+                session.Id,
+                connectionId,
+                CancellationToken.None);
+            await CompleteConnectionAsync(
+                metricsCollector,
+                sessionMetricsSink,
+                connectionMetrics,
                 eventSink,
                 session.Id,
                 connectionId,
@@ -247,26 +259,45 @@ public sealed class TcpDiagnosticSessionRunner
             connectionId,
             CancellationToken.None);
 
+        await CompleteConnectionAsync(
+            metricsCollector,
+            sessionMetricsSink,
+            connectionMetrics,
+            eventSink,
+            session.Id,
+            connectionId,
+            CancellationToken.None);
+    }
+
+    private static async ValueTask CompleteConnectionAsync(
+        SessionMetricsCollector? metricsCollector,
+        ISessionMetricsSink? sessionMetricsSink,
+        SessionMetricsCollector.ConnectionMetricsCollector? connectionMetrics,
+        ISessionEventSink eventSink,
+        SessionId sessionId,
+        ConnectionId connectionId,
+        CancellationToken cancellationToken)
+    {
         if (metricsCollector is not null && sessionMetricsSink is not null && connectionMetrics is not null)
         {
             await EmitConnectionMetricsSummaryAsync(
                 sessionMetricsSink,
                 eventSink,
-                session.Id,
+                sessionId,
                 connectionId,
                 metricsCollector.CloseConnection(connectionMetrics),
-                CancellationToken.None);
+                cancellationToken);
         }
 
         await EmitAsync(
             eventSink,
             SessionEventLevel.Info,
             SessionEventNames.ConnectionClosed,
-            session.Id,
+            sessionId,
             connectionId,
             $"Connection {connectionId} closed.",
             exception: null,
-            cancellationToken: CancellationToken.None);
+            cancellationToken);
     }
 
     private static async Task ForwardAsync(
