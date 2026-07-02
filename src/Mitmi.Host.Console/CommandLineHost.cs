@@ -3,16 +3,20 @@ using Mitmi.Application.Diagnostics;
 using Mitmi.Application.Protocols;
 using Mitmi.Application.Sessions;
 using Mitmi.Protocols.Modbus;
+using Mitmi.Protocols.Modbus.Diagnostics;
 
 namespace Mitmi.Host.Console;
 
 public static class CommandLineHost
 {
+    private const string DefaultConfigurationFileName = "mitmi.config.json";
+
     public static async Task<int> RunAsync(
         string[] args,
         TextWriter output,
         TextWriter error,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? applicationDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(output);
@@ -36,18 +40,22 @@ public static class CommandLineHost
             return ExitCodes.InvalidCommandLine;
         }
 
-        var configurationPath = Path.GetFullPath(options.ConfigurationPath!);
+        var configurationPath = ResolveConfigurationPath(options, applicationDirectory);
         if (!File.Exists(configurationPath))
         {
+            if (!await TryCreateDefaultConfigurationAsync(configurationPath, error, cancellationToken))
+            {
+                return ExitCodes.ConfigurationInvalid;
+            }
+
             RenderIssues(
-                error,
+                output,
                 [
                     new ConfigurationIssue(
-                        ConfigurationIssueSeverity.Error,
-                        ConfigurationIssueCodes.MissingConfigurationFile,
-                        $"Configuration file '{configurationPath}' does not exist.")
+                        ConfigurationIssueSeverity.Warning,
+                        ConfigurationIssueCodes.ConfigurationFileCreated,
+                        $"Configuration file '{configurationPath}' was not found, so a default one was created. Review endpoints before using MITMI with real devices.")
                 ]);
-            return ExitCodes.ConfigurationInvalid;
         }
 
         string json;
@@ -107,9 +115,17 @@ public static class CommandLineHost
         System.Console.CancelKeyPress += cancelHandler;
         try
         {
-            await new TcpDiagnosticSessionRunner().RunAsync(
+            await using var eventSink = new TextWriterSessionEventSink(
+                output,
+                error,
+                validationResult.RuntimeConfiguration!.Logging);
+            var protocolTrafficObserverFactory = BuildProtocolTrafficObserverFactory(
                 validationResult.RuntimeConfiguration!,
-                new TextWriterSessionEventSink(output, error),
+                eventSink);
+
+            await new TcpDiagnosticSessionRunner(protocolTrafficObserverFactory).RunAsync(
+                validationResult.RuntimeConfiguration!,
+                eventSink,
                 shutdown.Token);
             return ExitCodes.Success;
         }
@@ -128,11 +144,77 @@ public static class CommandLineHost
         }
     }
 
+    private static string ResolveConfigurationPath(
+        CliOptions options,
+        string? applicationDirectory)
+    {
+        if (options.HasExplicitConfigurationPath)
+        {
+            return Path.GetFullPath(options.ConfigurationPath!);
+        }
+
+        var baseDirectory = string.IsNullOrWhiteSpace(applicationDirectory)
+            ? AppContext.BaseDirectory
+            : applicationDirectory;
+
+        return Path.GetFullPath(Path.Combine(baseDirectory, DefaultConfigurationFileName));
+    }
+
+    private static async Task<bool> TryCreateDefaultConfigurationAsync(
+        string configurationPath,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(configurationPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            await File.WriteAllTextAsync(configurationPath, DefaultConfigurationTemplate, cancellationToken);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            RenderIssues(
+                error,
+                [
+                    new ConfigurationIssue(
+                        ConfigurationIssueSeverity.Error,
+                        ConfigurationIssueCodes.MissingConfigurationFile,
+                        $"Configuration file '{configurationPath}' does not exist and could not be created: {exception.Message}")
+                ]);
+            return false;
+        }
+    }
+
     private static ProtocolRegistry BuildProtocolRegistry()
     {
         var registry = new ProtocolRegistry();
         ModbusProtocolRegistration.Register(registry);
         return registry;
+    }
+
+    private static IProtocolTrafficObserverFactory? BuildProtocolTrafficObserverFactory(
+        RuntimeConfiguration configuration,
+        ISessionEventSink eventSink)
+    {
+        if (!configuration.Session.Diagnostics.DecodeProtocol)
+        {
+            return null;
+        }
+
+        if (string.Equals(
+            configuration.Session.Protocol.Value,
+            ModbusTcpProtocolPlugin.ProtocolId,
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return new ModbusTcpTrafficObserverFactory(eventSink);
+        }
+
+        return null;
     }
 
     private static void RenderStartupDiagnostics(
@@ -180,6 +262,51 @@ public static class CommandLineHost
     private static void WriteUsage(TextWriter writer)
     {
         writer.WriteLine("Usage:");
-        writer.WriteLine("  mitmi --config <path> [--validate-config]");
+        writer.WriteLine("  mitmi [--config <path>] [--validate-config]");
+        writer.WriteLine($"  Default config: {DefaultConfigurationFileName} beside the application executable.");
     }
+
+    private const string DefaultConfigurationTemplate = """
+        {
+          "configurationVersion": 1,
+          "logging": {
+            "console": {
+              "enabled": true,
+              "minimumLevel": "Info"
+            },
+            "file": {
+              "enabled": true,
+              "minimumLevel": "Info",
+              "path": "./logs/mitmi.log"
+            }
+          },
+          "capture": {
+            "enabled": true,
+            "outputPath": "./captures",
+            "retention": {
+              "mode": "Manual"
+            }
+          },
+          "metrics": {
+            "enabled": true,
+            "sink": "Log"
+          },
+          "session": {
+            "id": "default",
+            "protocol": "modbus-tcp",
+            "listenEndpoint": {
+              "address": "0.0.0.0",
+              "port": 1502
+            },
+            "upstreamEndpoint": {
+              "address": "127.0.0.1",
+              "port": 502
+            },
+            "diagnostics": {
+              "decodeProtocol": true,
+              "captureRawPayloads": true
+            }
+          }
+        }
+        """;
 }

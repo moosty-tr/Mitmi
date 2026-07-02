@@ -1,0 +1,135 @@
+using Mitmi.Host.Console;
+
+namespace Mitmi.IntegrationTests;
+
+public sealed class CommandLineHostConfigurationTests
+{
+    [Fact]
+    public async Task RunAsync_without_config_parameter_creates_default_config_in_application_directory()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        var exitCode = await CommandLineHost.RunAsync(
+            ["--validate-config"],
+            output,
+            error,
+            applicationDirectory: tempDirectory.Path);
+
+        var defaultConfigPath = Path.Combine(tempDirectory.Path, "mitmi.config.json");
+        Assert.Equal(0, exitCode);
+        Assert.True(File.Exists(defaultConfigPath));
+        Assert.Contains("CONFIGURATION_FILE_CREATED", output.ToString());
+        Assert.Contains(defaultConfigPath, output.ToString());
+        Assert.Contains("Configuration valid.", output.ToString());
+        Assert.Empty(error.ToString());
+    }
+
+    [Fact]
+    public async Task RunAsync_uses_explicit_config_path_when_provided()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var explicitConfigPath = Path.Combine(tempDirectory.Path, "custom.config.json");
+        await File.WriteAllTextAsync(explicitConfigPath, ValidConfigurationJson("custom"));
+
+        var exitCode = await CommandLineHost.RunAsync(
+            ["--config", explicitConfigPath, "--validate-config"],
+            output,
+            error,
+            applicationDirectory: tempDirectory.Path);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains($"Configuration: {explicitConfigPath}", output.ToString());
+        Assert.Contains("Session: custom", output.ToString());
+        Assert.DoesNotContain("CONFIGURATION_FILE_CREATED", output.ToString());
+        Assert.Empty(error.ToString());
+    }
+
+    [Fact]
+    public async Task RunAsync_creates_missing_explicit_config_path()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var explicitConfigPath = Path.Combine(tempDirectory.Path, "nested", "generated.config.json");
+
+        var exitCode = await CommandLineHost.RunAsync(
+            ["--config", explicitConfigPath, "--validate-config"],
+            output,
+            error,
+            applicationDirectory: tempDirectory.Path);
+
+        Assert.Equal(0, exitCode);
+        Assert.True(File.Exists(explicitConfigPath));
+        Assert.Contains("CONFIGURATION_FILE_CREATED", output.ToString());
+        Assert.Contains(explicitConfigPath, output.ToString());
+        Assert.Empty(error.ToString());
+    }
+
+    private static string ValidConfigurationJson(string sessionId) =>
+        $$"""
+          {
+            "configurationVersion": 1,
+            "logging": {
+              "console": {
+                "enabled": true,
+                "minimumLevel": "Info"
+              },
+              "file": {
+                "enabled": true,
+                "minimumLevel": "Info",
+                "path": "./logs/mitmi.log"
+              }
+            },
+            "capture": {
+              "enabled": true,
+              "outputPath": "./captures",
+              "retention": {
+                "mode": "Manual"
+              }
+            },
+            "metrics": {
+              "enabled": true,
+              "sink": "Log"
+            },
+            "session": {
+              "id": "{{sessionId}}",
+              "protocol": "modbus-tcp",
+              "listenEndpoint": {
+                "address": "0.0.0.0",
+                "port": 1502
+              },
+              "upstreamEndpoint": {
+                "address": "127.0.0.1",
+                "port": 502
+              },
+              "diagnostics": {
+                "decodeProtocol": true,
+                "captureRawPayloads": true
+              }
+            }
+          }
+          """;
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        public TemporaryDirectory()
+        {
+            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mitmi-tests", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path);
+        }
+
+        public string Path { get; }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+        }
+    }
+}

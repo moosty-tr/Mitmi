@@ -10,7 +10,13 @@ public sealed class TcpDiagnosticSessionRunner
 {
     private const int BufferSize = 81920;
 
+    private readonly IProtocolTrafficObserverFactory? trafficObserverFactory;
     private long nextConnectionId;
+
+    public TcpDiagnosticSessionRunner(IProtocolTrafficObserverFactory? trafficObserverFactory = null)
+    {
+        this.trafficObserverFactory = trafficObserverFactory;
+    }
 
     public async Task RunAsync(
         RuntimeConfiguration configuration,
@@ -67,7 +73,13 @@ public sealed class TcpDiagnosticSessionRunner
                 }
 
                 var connectionId = new ConnectionId(Interlocked.Increment(ref nextConnectionId));
-                await HandleConnectionAsync(configuration, client, connectionId, eventSink, cancellationToken);
+                await HandleConnectionAsync(
+                    configuration,
+                    client,
+                    connectionId,
+                    trafficObserverFactory?.Create(session.Id, connectionId),
+                    eventSink,
+                    cancellationToken);
             }
         }
         finally
@@ -98,6 +110,7 @@ public sealed class TcpDiagnosticSessionRunner
         RuntimeConfiguration configuration,
         TcpClient client,
         ConnectionId connectionId,
+        IProtocolTrafficObserver? trafficObserver,
         ISessionEventSink eventSink,
         CancellationToken cancellationToken)
     {
@@ -163,10 +176,20 @@ public sealed class TcpDiagnosticSessionRunner
         var clientToUpstream = ForwardAsync(
             acceptedClient.GetStream(),
             upstream.GetStream(),
+            session.Id,
+            connectionId,
+            TrafficDirection.ClientToServer,
+            trafficObserver,
+            eventSink,
             connectionCts.Token);
         var upstreamToClient = ForwardAsync(
             upstream.GetStream(),
             acceptedClient.GetStream(),
+            session.Id,
+            connectionId,
+            TrafficDirection.ServerToClient,
+            trafficObserver,
+            eventSink,
             connectionCts.Token);
 
         await Task.WhenAny(clientToUpstream, upstreamToClient);
@@ -192,6 +215,11 @@ public sealed class TcpDiagnosticSessionRunner
     private static async Task ForwardAsync(
         NetworkStream source,
         NetworkStream destination,
+        SessionId sessionId,
+        ConnectionId connectionId,
+        TrafficDirection direction,
+        IProtocolTrafficObserver? trafficObserver,
+        ISessionEventSink eventSink,
         CancellationToken cancellationToken)
     {
         var buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
@@ -206,11 +234,57 @@ public sealed class TcpDiagnosticSessionRunner
                 }
 
                 await destination.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+                if (trafficObserver is not null)
+                {
+                    await ObserveTrafficAsync(
+                        trafficObserver,
+                        eventSink,
+                        sessionId,
+                        connectionId,
+                        direction,
+                        buffer.AsMemory(0, bytesRead),
+                        cancellationToken);
+                }
             }
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private static async ValueTask ObserveTrafficAsync(
+        IProtocolTrafficObserver trafficObserver,
+        ISessionEventSink eventSink,
+        SessionId sessionId,
+        ConnectionId connectionId,
+        TrafficDirection direction,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await trafficObserver.ObserveAsync(
+                new ProtocolTrafficObservation(
+                    sessionId,
+                    connectionId,
+                    direction,
+                    payload.ToArray()),
+                cancellationToken);
+        }
+        catch (Exception exception) when (
+            exception is not OperationCanceledException ||
+            !cancellationToken.IsCancellationRequested)
+        {
+            await EmitAsync(
+                eventSink,
+                SessionEventLevel.Warning,
+                SessionEventNames.ProtocolObserverFailed,
+                sessionId,
+                connectionId,
+                $"Protocol diagnostics failed while observing {direction} traffic: {exception.Message}",
+                exception,
+                cancellationToken);
         }
     }
 

@@ -8,6 +8,12 @@ public static class SessionEventNames
     public const string ListenerBindFailed = "listener.bind_failed";
     public const string ListenerStarted = "listener.started";
     public const string ListenerStopped = "listener.stopped";
+    public const string ProtocolDecodeWarning = "protocol.decode_warning";
+    public const string ProtocolFrameDecoded = "protocol.frame_decoded";
+    public const string ProtocolObserverFailed = "protocol.observer_failed";
+    public const string ProtocolTransactionMatched = "protocol.transaction_matched";
+    public const string ProtocolTransactionObserved = "protocol.transaction_observed";
+    public const string ProtocolTransactionWarning = "protocol.transaction_warning";
     public const string SessionStopped = "session.stopped";
     public const string UpstreamConnected = "upstream.connected";
     public const string UpstreamConnectionFailed = "upstream.connection_failed";

@@ -108,13 +108,6 @@
       "mitmi.domain": {
         "type": "Project"
       },
-      "mitmi.host.console": {
-        "type": "Project",
-        "dependencies": {
-          "Mitmi.Application": "[1.0.0, )",
-          "Mitmi.Protocols.Modbus": "[1.0.0, )"
-        }
-      },
       "mitmi.protocols.modbus": {
         "type": "Project",
         "dependencies": {

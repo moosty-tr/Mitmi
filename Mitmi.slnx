@@ -8,5 +8,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Mitmi.Application.Tests/Mitmi.Application.Tests.csproj" />
     <Project Path="tests/Mitmi.IntegrationTests/Mitmi.IntegrationTests.csproj" />
+    <Project Path="tests/Mitmi.Protocols.Modbus.Tests/Mitmi.Protocols.Modbus.Tests.csproj" />
   </Folder>
 </Solution>

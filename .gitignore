@@ -8,6 +8,11 @@ obj/
 *.user
 *.suo
 
+# Local MITMI runtime files
+/mitmi.config.json
+/logs/
+/captures/
+
 # OS noise
 Thumbs.db
 .DS_Store

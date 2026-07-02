@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using Mitmi.Application.Configuration;
 using Mitmi.Application.Sessions;
 using Mitmi.Domain;
+using Mitmi.Protocols.Modbus.Diagnostics;
 
 namespace Mitmi.IntegrationTests;
 
@@ -36,6 +37,46 @@ public sealed class TcpDiagnosticSessionRunnerTests
 
         Assert.Equal(request, await upstreamTask);
         Assert.Equal(response, clientReceived);
+
+        client.Close();
+        await sink.WaitForAsync(SessionEventNames.ConnectionClosed, timeout.Token);
+
+        await runnerCancellation.CancelAsync();
+        await runnerTask.WaitAsync(timeout.Token);
+    }
+
+    [Fact]
+    public async Task RunAsync_emits_modbus_diagnostics_for_live_pass_through_traffic()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var upstreamListener = new TcpListener(IPAddress.Loopback, 0);
+        upstreamListener.Start();
+        var upstreamPort = ((IPEndPoint)upstreamListener.LocalEndpoint).Port;
+        var listenPort = ReserveTcpPort();
+        var request = ReadHoldingRegistersRequest();
+        var response = ReadHoldingRegistersResponse();
+
+        var upstreamTask = AcceptOneExchangeAsync(upstreamListener, request.Length, response, timeout.Token);
+        var sink = new RecordingSessionEventSink();
+        using var runnerCancellation = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
+        var runnerTask = new TcpDiagnosticSessionRunner(new ModbusTcpTrafficObserverFactory(sink)).RunAsync(
+            CreateConfiguration(listenPort, upstreamPort),
+            sink,
+            runnerCancellation.Token);
+
+        await sink.WaitForAsync(SessionEventNames.ListenerStarted, timeout.Token);
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, listenPort, timeout.Token);
+        await client.GetStream().WriteAsync(request, timeout.Token);
+        var clientReceived = await ReadExactAsync(client.GetStream(), response.Length, timeout.Token);
+        var matched = await sink.WaitForAsync(SessionEventNames.ProtocolTransactionMatched, timeout.Token);
+
+        Assert.Equal(request, await upstreamTask);
+        Assert.Equal(response, clientReceived);
+        Assert.Contains("correlation=002A:01", matched.Message);
+        Assert.Contains(sink.Events, sessionEvent => sessionEvent.Name == SessionEventNames.ProtocolFrameDecoded);
+        Assert.Contains(sink.Events, sessionEvent => sessionEvent.Name == SessionEventNames.ProtocolTransactionObserved);
 
         client.Close();
         await sink.WaitForAsync(SessionEventNames.ConnectionClosed, timeout.Token);
@@ -152,6 +193,30 @@ public sealed class TcpDiagnosticSessionRunnerTests
         listener.Stop();
         return port;
     }
+
+    private static byte[] ReadHoldingRegistersRequest() =>
+    [
+        0x00, 0x2A,
+        0x00, 0x00,
+        0x00, 0x06,
+        0x01,
+        0x03,
+        0x00, 0x6B,
+        0x00, 0x03
+    ];
+
+    private static byte[] ReadHoldingRegistersResponse() =>
+    [
+        0x00, 0x2A,
+        0x00, 0x00,
+        0x00, 0x09,
+        0x01,
+        0x03,
+        0x06,
+        0x02, 0x2B,
+        0x00, 0x00,
+        0x00, 0x64
+    ];
 
     private sealed class RecordingSessionEventSink : ISessionEventSink
     {

@@ -15,8 +15,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Mitmi.Application\Mitmi.Application.csproj" />
-    <ProjectReference Include="..\..\src\Mitmi.Host.Console\Mitmi.Host.Console.csproj" />
     <ProjectReference Include="..\..\src\Mitmi.Protocols.Modbus\Mitmi.Protocols.Modbus.csproj" />
   </ItemGroup>
 

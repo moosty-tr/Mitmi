@@ -4,17 +4,21 @@ internal sealed class CliOptions
 {
     private CliOptions(
         string? configurationPath,
+        bool hasExplicitConfigurationPath,
         bool validateConfig,
         bool showHelp,
         IReadOnlyList<string> errors)
     {
         ConfigurationPath = configurationPath;
+        HasExplicitConfigurationPath = hasExplicitConfigurationPath;
         ValidateConfig = validateConfig;
         ShowHelp = showHelp;
         Errors = errors;
     }
 
     public string? ConfigurationPath { get; }
+
+    public bool HasExplicitConfigurationPath { get; }
 
     public bool ValidateConfig { get; }
 
@@ -26,6 +30,7 @@ internal sealed class CliOptions
     {
         var errors = new List<string>();
         string? configurationPath = null;
+        var hasExplicitConfigurationPath = false;
         var validateConfig = false;
         var showHelp = false;
 
@@ -51,6 +56,7 @@ internal sealed class CliOptions
                     }
 
                     configurationPath = args[++index];
+                    hasExplicitConfigurationPath = true;
                     break;
 
                 default:
@@ -59,11 +65,6 @@ internal sealed class CliOptions
             }
         }
 
-        if (!showHelp && string.IsNullOrWhiteSpace(configurationPath))
-        {
-            errors.Add("Missing required --config <path> argument.");
-        }
-
-        return new CliOptions(configurationPath, validateConfig, showHelp, errors);
+        return new CliOptions(configurationPath, hasExplicitConfigurationPath, validateConfig, showHelp, errors);
     }
 }
