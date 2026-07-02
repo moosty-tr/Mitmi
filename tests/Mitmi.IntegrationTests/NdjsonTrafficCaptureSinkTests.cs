@@ -84,16 +84,107 @@ public sealed class NdjsonTrafficCaptureSinkTests
         Assert.False(document.ContainsKey("rawPayloadBase64"));
     }
 
+    [Fact]
+    public async Task CaptureAsync_reports_loss_summary_when_records_are_dropped()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        var eventSink = new RecordingSessionEventSink();
+        var writer = new BlockingTextWriter();
+
+        await using (var captureSink = new NdjsonTrafficCaptureSink(
+            new CaptureRuntimeOptions(true, tempDirectory.Path, CaptureRetentionMode.Manual),
+            eventSink,
+            new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero),
+            capacity: 1,
+            writer))
+        {
+            await captureSink.CaptureAsync(CreateRecord(TrafficDirection.ClientToServer, [0x01]), CancellationToken.None);
+            await writer.WaitForFirstWriteAsync();
+
+            await captureSink.CaptureAsync(CreateRecord(TrafficDirection.ServerToClient, [0x02]), CancellationToken.None);
+            await captureSink.CaptureAsync(CreateRecord(TrafficDirection.ClientToServer, [0x03]), CancellationToken.None);
+
+            Assert.Equal(1, captureSink.DroppedRecords);
+
+            writer.ReleaseFirstWrite();
+        }
+
+        Assert.Contains(eventSink.Events, sessionEvent => sessionEvent.Name == SessionEventNames.CaptureRecordDropped);
+
+        var summary = Assert.Single(
+            eventSink.Events,
+            sessionEvent => sessionEvent.Name == SessionEventNames.CaptureRecordLossSummary);
+        Assert.Equal(new SessionId("integration"), summary.SessionId);
+        Assert.Null(summary.ConnectionId);
+        Assert.Contains("Dropped 1 capture records", summary.Message);
+    }
+
+    private static TrafficCaptureRecord CreateRecord(
+        TrafficDirection direction,
+        byte[] payload)
+    {
+        return new TrafficCaptureRecord(
+            DateTimeOffset.UtcNow,
+            new SessionId("integration"),
+            new ConnectionId(9),
+            new ProtocolId("modbus-tcp"),
+            direction,
+            payload.Length,
+            payload);
+    }
+
     private sealed class RecordingSessionEventSink : ISessionEventSink
     {
+        private readonly object gate = new();
         private readonly List<SessionEvent> events = [];
 
-        public IReadOnlyList<SessionEvent> Events => events;
+        public IReadOnlyList<SessionEvent> Events
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return events.ToArray();
+                }
+            }
+        }
 
         public ValueTask EmitAsync(SessionEvent sessionEvent, CancellationToken cancellationToken)
         {
-            events.Add(sessionEvent);
+            lock (gate)
+            {
+                events.Add(sessionEvent);
+            }
+
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class BlockingTextWriter : StringWriter
+    {
+        private readonly TaskCompletionSource firstWriteStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource releaseFirstWrite = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int shouldBlockFirstWrite = 1;
+
+        public override async Task WriteLineAsync(string? value)
+        {
+            if (Interlocked.Exchange(ref shouldBlockFirstWrite, 0) == 1)
+            {
+                firstWriteStarted.TrySetResult();
+                await releaseFirstWrite.Task;
+            }
+
+            await base.WriteLineAsync(value);
+        }
+
+        public Task WaitForFirstWriteAsync()
+        {
+            return firstWriteStarted.Task;
+        }
+
+        public void ReleaseFirstWrite()
+        {
+            releaseFirstWrite.TrySetResult();
         }
     }
 

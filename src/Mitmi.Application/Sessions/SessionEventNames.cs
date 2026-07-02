@@ -3,6 +3,7 @@ namespace Mitmi.Application.Sessions;
 public static class SessionEventNames
 {
     public const string CaptureRecordDropped = "capture.record_dropped";
+    public const string CaptureRecordLossSummary = "capture.record_loss_summary";
     public const string CaptureSinkFailed = "capture.sink_failed";
     public const string ClientAccepted = "client.accepted";
     public const string ConnectionClosed = "connection.closed";
