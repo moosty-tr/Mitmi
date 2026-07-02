@@ -11,11 +11,15 @@ public sealed class TcpDiagnosticSessionRunner
     private const int BufferSize = 81920;
 
     private readonly IProtocolTrafficObserverFactory? trafficObserverFactory;
+    private readonly ITrafficCaptureSink? trafficCaptureSink;
     private long nextConnectionId;
 
-    public TcpDiagnosticSessionRunner(IProtocolTrafficObserverFactory? trafficObserverFactory = null)
+    public TcpDiagnosticSessionRunner(
+        IProtocolTrafficObserverFactory? trafficObserverFactory = null,
+        ITrafficCaptureSink? trafficCaptureSink = null)
     {
         this.trafficObserverFactory = trafficObserverFactory;
+        this.trafficCaptureSink = trafficCaptureSink;
     }
 
     public async Task RunAsync(
@@ -77,6 +81,7 @@ public sealed class TcpDiagnosticSessionRunner
                     configuration,
                     client,
                     connectionId,
+                    trafficCaptureSink,
                     trafficObserverFactory?.Create(session.Id, connectionId),
                     eventSink,
                     cancellationToken);
@@ -110,6 +115,7 @@ public sealed class TcpDiagnosticSessionRunner
         RuntimeConfiguration configuration,
         TcpClient client,
         ConnectionId connectionId,
+        ITrafficCaptureSink? trafficCaptureSink,
         IProtocolTrafficObserver? trafficObserver,
         ISessionEventSink eventSink,
         CancellationToken cancellationToken)
@@ -178,7 +184,10 @@ public sealed class TcpDiagnosticSessionRunner
             upstream.GetStream(),
             session.Id,
             connectionId,
+            session.Protocol,
             TrafficDirection.ClientToServer,
+            configuration.Session.Diagnostics.CaptureRawPayloads,
+            trafficCaptureSink,
             trafficObserver,
             eventSink,
             connectionCts.Token);
@@ -187,7 +196,10 @@ public sealed class TcpDiagnosticSessionRunner
             acceptedClient.GetStream(),
             session.Id,
             connectionId,
+            session.Protocol,
             TrafficDirection.ServerToClient,
+            configuration.Session.Diagnostics.CaptureRawPayloads,
+            trafficCaptureSink,
             trafficObserver,
             eventSink,
             connectionCts.Token);
@@ -217,7 +229,10 @@ public sealed class TcpDiagnosticSessionRunner
         NetworkStream destination,
         SessionId sessionId,
         ConnectionId connectionId,
+        ProtocolId protocolId,
         TrafficDirection direction,
+        bool captureRawPayloads,
+        ITrafficCaptureSink? trafficCaptureSink,
         IProtocolTrafficObserver? trafficObserver,
         ISessionEventSink eventSink,
         CancellationToken cancellationToken)
@@ -234,6 +249,20 @@ public sealed class TcpDiagnosticSessionRunner
                 }
 
                 await destination.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+                if (trafficCaptureSink is not null)
+                {
+                    await CaptureTrafficAsync(
+                        trafficCaptureSink,
+                        eventSink,
+                        sessionId,
+                        connectionId,
+                        protocolId,
+                        direction,
+                        buffer.AsMemory(0, bytesRead),
+                        captureRawPayloads,
+                        cancellationToken);
+                }
+
                 if (trafficObserver is not null)
                 {
                     await ObserveTrafficAsync(
@@ -250,6 +279,46 @@ public sealed class TcpDiagnosticSessionRunner
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private static async ValueTask CaptureTrafficAsync(
+        ITrafficCaptureSink trafficCaptureSink,
+        ISessionEventSink eventSink,
+        SessionId sessionId,
+        ConnectionId connectionId,
+        ProtocolId protocolId,
+        TrafficDirection direction,
+        ReadOnlyMemory<byte> payload,
+        bool captureRawPayloads,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await trafficCaptureSink.CaptureAsync(
+                new TrafficCaptureRecord(
+                    DateTimeOffset.UtcNow,
+                    sessionId,
+                    connectionId,
+                    protocolId,
+                    direction,
+                    payload.Length,
+                    captureRawPayloads ? payload.ToArray() : null),
+                cancellationToken);
+        }
+        catch (Exception exception) when (
+            exception is not OperationCanceledException ||
+            !cancellationToken.IsCancellationRequested)
+        {
+            await EmitAsync(
+                eventSink,
+                SessionEventLevel.Warning,
+                SessionEventNames.CaptureSinkFailed,
+                sessionId,
+                connectionId,
+                $"Capture failed while observing {direction} traffic: {exception.Message}",
+                exception,
+                cancellationToken);
         }
     }
 

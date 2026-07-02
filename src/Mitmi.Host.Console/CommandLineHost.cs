@@ -119,11 +119,19 @@ public static class CommandLineHost
                 output,
                 error,
                 validationResult.RuntimeConfiguration!.Logging);
+            await using var captureSink = CreateTrafficCaptureSink(
+                validationResult.RuntimeConfiguration!,
+                eventSink);
+            if (captureSink is not null)
+            {
+                await output.WriteLineAsync($"Writing capture records to {captureSink.CaptureFilePath}.");
+            }
+
             var protocolTrafficObserverFactory = BuildProtocolTrafficObserverFactory(
                 validationResult.RuntimeConfiguration!,
                 eventSink);
 
-            await new TcpDiagnosticSessionRunner(protocolTrafficObserverFactory).RunAsync(
+            await new TcpDiagnosticSessionRunner(protocolTrafficObserverFactory, captureSink).RunAsync(
                 validationResult.RuntimeConfiguration!,
                 eventSink,
                 shutdown.Token);
@@ -142,6 +150,21 @@ public static class CommandLineHost
         {
             System.Console.CancelKeyPress -= cancelHandler;
         }
+    }
+
+    private static NdjsonTrafficCaptureSink? CreateTrafficCaptureSink(
+        RuntimeConfiguration configuration,
+        ISessionEventSink eventSink)
+    {
+        if (!configuration.Capture.Enabled)
+        {
+            return null;
+        }
+
+        return new NdjsonTrafficCaptureSink(
+            configuration.Capture,
+            eventSink,
+            DateTimeOffset.UtcNow);
     }
 
     private static string ResolveConfigurationPath(

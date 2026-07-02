@@ -86,6 +86,55 @@ public sealed class TcpDiagnosticSessionRunnerTests
     }
 
     [Fact]
+    public async Task RunAsync_captures_forwarded_traffic_when_capture_sink_is_configured()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var upstreamListener = new TcpListener(IPAddress.Loopback, 0);
+        upstreamListener.Start();
+        var upstreamPort = ((IPEndPoint)upstreamListener.LocalEndpoint).Port;
+        var listenPort = ReserveTcpPort();
+        var request = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+        var response = new byte[] { 0x10, 0x20, 0x30 };
+
+        var upstreamTask = AcceptOneExchangeAsync(upstreamListener, request.Length, response, timeout.Token);
+        var eventSink = new RecordingSessionEventSink();
+        var captureSink = new RecordingTrafficCaptureSink();
+        using var runnerCancellation = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
+        var runnerTask = new TcpDiagnosticSessionRunner(trafficCaptureSink: captureSink).RunAsync(
+            CreateConfiguration(
+                listenPort,
+                upstreamPort,
+                captureEnabled: true,
+                captureRawPayloads: true),
+            eventSink,
+            runnerCancellation.Token);
+
+        await eventSink.WaitForAsync(SessionEventNames.ListenerStarted, timeout.Token);
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, listenPort, timeout.Token);
+        await client.GetStream().WriteAsync(request, timeout.Token);
+        var clientReceived = await ReadExactAsync(client.GetStream(), response.Length, timeout.Token);
+        var clientToServer = await captureSink.WaitForAsync(TrafficDirection.ClientToServer, timeout.Token);
+        var serverToClient = await captureSink.WaitForAsync(TrafficDirection.ServerToClient, timeout.Token);
+
+        Assert.Equal(request, await upstreamTask);
+        Assert.Equal(response, clientReceived);
+        Assert.Equal(new SessionId("integration"), clientToServer.SessionId);
+        Assert.Equal(new ProtocolId("modbus-tcp"), clientToServer.ProtocolId);
+        Assert.Equal(request.Length, clientToServer.PayloadLength);
+        Assert.Equal(request, clientToServer.RawPayload);
+        Assert.Equal(response.Length, serverToClient.PayloadLength);
+        Assert.Equal(response, serverToClient.RawPayload);
+
+        client.Close();
+        await eventSink.WaitForAsync(SessionEventNames.ConnectionClosed, timeout.Token);
+
+        await runnerCancellation.CancelAsync();
+        await runnerTask.WaitAsync(timeout.Token);
+    }
+
+    [Fact]
     public async Task RunAsync_reports_upstream_connect_failure()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -133,7 +182,11 @@ public sealed class TcpDiagnosticSessionRunnerTests
         Assert.Contains(sink.Events, sessionEvent => sessionEvent.Name == SessionEventNames.SessionStopped);
     }
 
-    private static RuntimeConfiguration CreateConfiguration(int listenPort, int upstreamPort)
+    private static RuntimeConfiguration CreateConfiguration(
+        int listenPort,
+        int upstreamPort,
+        bool captureEnabled = false,
+        bool captureRawPayloads = false)
     {
         return new RuntimeConfiguration(
             ConfigurationVersion: 1,
@@ -141,14 +194,14 @@ public sealed class TcpDiagnosticSessionRunnerTests
             Logging: new LoggingRuntimeOptions(
                 new LogSinkRuntimeOptions(true, ProductLogLevel.Info, null),
                 new LogSinkRuntimeOptions(false, ProductLogLevel.Info, null)),
-            Capture: new CaptureRuntimeOptions(false, Path.Combine(Path.GetTempPath(), "mitmi-captures"), CaptureRetentionMode.Manual),
+            Capture: new CaptureRuntimeOptions(captureEnabled, Path.Combine(Path.GetTempPath(), "mitmi-captures"), CaptureRetentionMode.Manual),
             Metrics: new MetricsRuntimeOptions(false, "Log"),
             Session: new SessionRuntimeOptions(
                 new SessionId("integration"),
                 new ProtocolId("modbus-tcp"),
                 new NetworkEndpoint(IPAddress.Loopback.ToString(), listenPort),
                 new NetworkEndpoint(IPAddress.Loopback.ToString(), upstreamPort),
-                new SessionDiagnosticsRuntimeOptions(DecodeProtocol: false, CaptureRawPayloads: false)));
+                new SessionDiagnosticsRuntimeOptions(DecodeProtocol: false, CaptureRawPayloads: captureRawPayloads)));
     }
 
     private static async Task<byte[]> AcceptOneExchangeAsync(
@@ -277,6 +330,63 @@ public sealed class TcpDiagnosticSessionRunnerTests
                 }
 
                 waitersForName.Add(waiter);
+            }
+
+            await using var registration = cancellationToken.Register(() => waiter.TrySetCanceled(cancellationToken));
+            return await waiter.Task;
+        }
+    }
+
+    private sealed class RecordingTrafficCaptureSink : ITrafficCaptureSink
+    {
+        private readonly object gate = new();
+        private readonly List<TrafficCaptureRecord> records = [];
+        private readonly Dictionary<TrafficDirection, List<TaskCompletionSource<TrafficCaptureRecord>>> waiters = new();
+
+        public ValueTask CaptureAsync(TrafficCaptureRecord record, CancellationToken cancellationToken)
+        {
+            List<TaskCompletionSource<TrafficCaptureRecord>>? matchingWaiters = null;
+            lock (gate)
+            {
+                records.Add(record);
+                if (waiters.Remove(record.Direction, out var waitersForDirection))
+                {
+                    matchingWaiters = waitersForDirection;
+                }
+            }
+
+            if (matchingWaiters is not null)
+            {
+                foreach (var waiter in matchingWaiters)
+                {
+                    waiter.TrySetResult(record);
+                }
+            }
+
+            return ValueTask.CompletedTask;
+        }
+
+        public async Task<TrafficCaptureRecord> WaitForAsync(
+            TrafficDirection direction,
+            CancellationToken cancellationToken)
+        {
+            TaskCompletionSource<TrafficCaptureRecord> waiter;
+            lock (gate)
+            {
+                var existingRecord = records.FirstOrDefault(record => record.Direction == direction);
+                if (existingRecord is not null)
+                {
+                    return existingRecord;
+                }
+
+                waiter = new TaskCompletionSource<TrafficCaptureRecord>(TaskCreationOptions.RunContinuationsAsynchronously);
+                if (!waiters.TryGetValue(direction, out var waitersForDirection))
+                {
+                    waitersForDirection = [];
+                    waiters.Add(direction, waitersForDirection);
+                }
+
+                waitersForDirection.Add(waiter);
             }
 
             await using var registration = cancellationToken.Register(() => waiter.TrySetCanceled(cancellationToken));
