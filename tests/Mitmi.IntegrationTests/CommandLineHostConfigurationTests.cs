@@ -26,6 +26,30 @@ public sealed class CommandLineHostConfigurationTests
     }
 
     [Fact]
+    public async Task RunAsync_init_config_matches_checked_in_example_configuration()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        var exitCode = await CommandLineHost.RunAsync(
+            ["--init-config"],
+            output,
+            error,
+            applicationDirectory: tempDirectory.Path);
+
+        var defaultConfigPath = Path.Combine(tempDirectory.Path, "mitmi.config.json");
+        var generatedConfiguration = await File.ReadAllTextAsync(defaultConfigPath);
+        var exampleConfiguration = await File.ReadAllTextAsync(
+            Path.Combine(FindRepositoryRoot(), "examples", "mitmi.config.example.json"));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(
+            NormalizeLineEndings(exampleConfiguration),
+            NormalizeLineEndings(generatedConfiguration));
+    }
+
+    [Fact]
     public async Task RunAsync_without_config_parameter_reports_missing_default_config()
     {
         using var tempDirectory = new TemporaryDirectory();
@@ -172,6 +196,27 @@ public sealed class CommandLineHostConfigurationTests
             }
           }
           """;
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "Mitmi.slnx")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("Could not locate repository root from the test output directory.");
+    }
+
+    private static string NormalizeLineEndings(string value)
+    {
+        return value.Replace("\r\n", "\n", StringComparison.Ordinal);
+    }
 
     private sealed class TemporaryDirectory : IDisposable
     {

@@ -263,6 +263,7 @@ public static class CommandLineHost
                 useAsync: true);
             await using var writer = new StreamWriter(file);
             await writer.WriteAsync(DefaultConfigurationTemplate.AsMemory(), cancellationToken);
+            await writer.WriteAsync(Environment.NewLine.AsMemory(), cancellationToken);
             return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
