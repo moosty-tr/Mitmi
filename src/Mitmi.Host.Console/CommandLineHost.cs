@@ -255,7 +255,9 @@ public static class CommandLineHost
             ModbusTcpProtocolPlugin.ProtocolId,
             StringComparison.OrdinalIgnoreCase))
         {
-            return new ModbusTcpTrafficObserverFactory(eventSink);
+            return new BoundedProtocolTrafficObserverFactory(
+                new ModbusTcpTrafficObserverFactory(eventSink),
+                eventSink);
         }
 
         return null;

@@ -175,6 +175,12 @@ public sealed class TcpDiagnosticSessionRunner
                 $"Failed to connect upstream for connection {connectionId} to {session.UpstreamEndpoint}: {exception.Message}",
                 exception,
                 cancellationToken.IsCancellationRequested ? CancellationToken.None : cancellationToken);
+            await DisposeProtocolTrafficObserverAsync(
+                trafficObserver,
+                eventSink,
+                session.Id,
+                connectionId,
+                CancellationToken.None);
             return;
         }
 
@@ -234,6 +240,12 @@ public sealed class TcpDiagnosticSessionRunner
 
         await ObserveForwardingCompletionAsync(clientToUpstream, cancellationToken);
         await ObserveForwardingCompletionAsync(upstreamToClient, cancellationToken);
+        await DisposeProtocolTrafficObserverAsync(
+            trafficObserver,
+            eventSink,
+            session.Id,
+            connectionId,
+            CancellationToken.None);
 
         if (metricsCollector is not null && sessionMetricsSink is not null && connectionMetrics is not null)
         {
@@ -463,6 +475,36 @@ public sealed class TcpDiagnosticSessionRunner
             exception is SocketException ||
             cancellationToken.IsCancellationRequested)
         {
+        }
+    }
+
+    private static async ValueTask DisposeProtocolTrafficObserverAsync(
+        IProtocolTrafficObserver? trafficObserver,
+        ISessionEventSink eventSink,
+        SessionId sessionId,
+        ConnectionId connectionId,
+        CancellationToken cancellationToken)
+    {
+        if (trafficObserver is not IAsyncDisposable asyncDisposableObserver)
+        {
+            return;
+        }
+
+        try
+        {
+            await asyncDisposableObserver.DisposeAsync();
+        }
+        catch (Exception exception)
+        {
+            await EmitAsync(
+                eventSink,
+                SessionEventLevel.Warning,
+                SessionEventNames.ProtocolObserverFailed,
+                sessionId,
+                connectionId,
+                $"Protocol diagnostics failed while flushing observations: {exception.Message}",
+                exception,
+                cancellationToken);
         }
     }
 
