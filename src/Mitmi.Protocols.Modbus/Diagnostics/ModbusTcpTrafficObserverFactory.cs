@@ -8,6 +8,7 @@ public sealed class ModbusTcpTrafficObserverFactory : IProtocolTrafficObserverFa
     private readonly ISessionEventSink eventSink;
     private readonly bool captureRawPayloads;
     private readonly ITrafficCaptureSink? trafficCaptureSink;
+    private readonly IModbusTcpAnalyzerSummarySink? analyzerSummarySink;
     private readonly ModbusTcpAnalyzerSessionSummary analyzerSessionSummary = new();
     private SessionId? sessionId;
     private int disposed;
@@ -15,11 +16,13 @@ public sealed class ModbusTcpTrafficObserverFactory : IProtocolTrafficObserverFa
     public ModbusTcpTrafficObserverFactory(
         ISessionEventSink eventSink,
         ITrafficCaptureSink? trafficCaptureSink = null,
-        bool captureRawPayloads = false)
+        bool captureRawPayloads = false,
+        IModbusTcpAnalyzerSummarySink? analyzerSummarySink = null)
     {
         this.eventSink = eventSink;
         this.trafficCaptureSink = trafficCaptureSink;
         this.captureRawPayloads = captureRawPayloads;
+        this.analyzerSummarySink = analyzerSummarySink;
     }
 
     public IProtocolTrafficObserver Create(SessionId sessionId, ConnectionId connectionId)
@@ -39,9 +42,16 @@ public sealed class ModbusTcpTrafficObserverFactory : IProtocolTrafficObserverFa
             return;
         }
 
-        foreach (var summaryEvent in analyzerSessionSummary.CreateEvents(sessionId.Value))
+        var timestamp = DateTimeOffset.UtcNow;
+        var summaryRecords = analyzerSessionSummary.CreateRecords(sessionId.Value, timestamp);
+        foreach (var summaryEvent in analyzerSessionSummary.CreateEvents(summaryRecords))
         {
             await eventSink.EmitAsync(summaryEvent, CancellationToken.None);
+        }
+
+        if (analyzerSummarySink is not null)
+        {
+            await analyzerSummarySink.EmitAsync(summaryRecords, CancellationToken.None);
         }
     }
 }

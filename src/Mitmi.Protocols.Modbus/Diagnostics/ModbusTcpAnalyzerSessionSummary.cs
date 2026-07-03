@@ -37,7 +37,9 @@ public sealed class ModbusTcpAnalyzerSessionSummary
         }
     }
 
-    public IReadOnlyList<SessionEvent> CreateEvents(SessionId sessionId)
+    public IReadOnlyList<ModbusTcpAnalyzerSummaryRecord> CreateRecords(
+        SessionId sessionId,
+        DateTimeOffset timestamp)
     {
         SummaryEntry[] snapshot;
         lock (gate)
@@ -51,13 +53,23 @@ public sealed class ModbusTcpAnalyzerSessionSummary
         }
 
         return snapshot
-            .Select(entry => new SessionEvent(
-                DateTimeOffset.UtcNow,
+            .Select(entry => entry.CreateRecord(sessionId, timestamp))
+            .ToArray();
+    }
+
+    public IReadOnlyList<SessionEvent> CreateEvents(
+        IReadOnlyList<ModbusTcpAnalyzerSummaryRecord> records)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+
+        return records
+            .Select(record => new SessionEvent(
+                record.Timestamp,
                 SessionEventLevel.Info,
                 SessionEventNames.ProtocolAnalyzerSummary,
-                sessionId,
+                record.SessionId,
                 ConnectionId: null,
-                entry.Render()))
+                Render(record)))
             .ToArray();
     }
 
@@ -121,31 +133,52 @@ public sealed class ModbusTcpAnalyzerSessionSummary
             }
         }
 
-        public string Render()
+        public ModbusTcpAnalyzerSummaryRecord CreateRecord(
+            SessionId sessionId,
+            DateTimeOffset timestamp)
         {
-            var address = Key.Address is null
-                ? "unknown"
-                : Key.Address.Value.ToString(CultureInfo.InvariantCulture);
-            var quantity = Key.Quantity is null
-                ? "unknown"
-                : Key.Quantity.Value.ToString(CultureInfo.InvariantCulture);
-            var range = Key.AddressRange ?? "unknown";
-
-            return string.Join(
-                " ",
-                "Modbus analyzer summary",
-                $"unit={Key.UnitId.ToString(CultureInfo.InvariantCulture)}",
-                $"function={Key.FunctionCode.ToString(CultureInfo.InvariantCulture)}",
-                $"operation={Key.Operation}",
-                $"address={address}",
-                $"quantity={quantity}",
-                $"address_range={range}",
-                "address_base=zeroBasedPdu",
-                $"reads={Reads.ToString(CultureInfo.InvariantCulture)}",
-                $"writes={Writes.ToString(CultureInfo.InvariantCulture)}",
-                $"requests={Requests.ToString(CultureInfo.InvariantCulture)}",
-                $"responses={Responses.ToString(CultureInfo.InvariantCulture)}",
-                $"exceptions={Exceptions.ToString(CultureInfo.InvariantCulture)}.");
+            return new ModbusTcpAnalyzerSummaryRecord(
+                timestamp,
+                sessionId,
+                Key.UnitId,
+                Key.FunctionCode,
+                Key.Operation,
+                Key.Address,
+                Key.Quantity,
+                Key.AddressRange,
+                "zeroBasedPdu",
+                Reads,
+                Writes,
+                Requests,
+                Responses,
+                Exceptions);
         }
+    }
+
+    private static string Render(ModbusTcpAnalyzerSummaryRecord record)
+    {
+        var address = record.Address is null
+            ? "unknown"
+            : record.Address.Value.ToString(CultureInfo.InvariantCulture);
+        var quantity = record.Quantity is null
+            ? "unknown"
+            : record.Quantity.Value.ToString(CultureInfo.InvariantCulture);
+        var range = record.AddressRange ?? "unknown";
+
+        return string.Join(
+            " ",
+            "Modbus analyzer summary",
+            $"unit={record.UnitId.ToString(CultureInfo.InvariantCulture)}",
+            $"function={record.FunctionCode.ToString(CultureInfo.InvariantCulture)}",
+            $"operation={record.Operation}",
+            $"address={address}",
+            $"quantity={quantity}",
+            $"address_range={range}",
+            $"address_base={record.AddressBase}",
+            $"reads={record.Reads.ToString(CultureInfo.InvariantCulture)}",
+            $"writes={record.Writes.ToString(CultureInfo.InvariantCulture)}",
+            $"requests={record.Requests.ToString(CultureInfo.InvariantCulture)}",
+            $"responses={record.Responses.ToString(CultureInfo.InvariantCulture)}",
+            $"exceptions={record.Exceptions.ToString(CultureInfo.InvariantCulture)}.");
     }
 }

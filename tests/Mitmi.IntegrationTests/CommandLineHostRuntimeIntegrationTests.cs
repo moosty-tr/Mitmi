@@ -99,7 +99,30 @@ public sealed class CommandLineHostRuntimeIntegrationTests
             Assert.True(document.ContainsKey("rawPayloadBase64"));
         });
 
-        Assert.Contains("Writing capture records to", output.ToString());
+        var summaryFile = Assert.Single(Directory.GetFiles(
+            Path.Combine(tempDirectory.Path, "captures", "summaries"),
+            "mitmi-modbus-analyzer-summary-*.ndjson"));
+        var summaryLines = await File.ReadAllLinesAsync(summaryFile);
+        var summaryDocuments = summaryLines.Select(line => JsonNode.Parse(line)!.AsObject()).ToArray();
+        var holdingRegisterSummary = Assert.Single(summaryDocuments, document =>
+            document["operation"]!.GetValue<string>() == "readHoldingRegisters" &&
+            document["address"]!.GetValue<int>() == 0 &&
+            document["quantity"]!.GetValue<int>() == 2);
+        Assert.Equal(1, holdingRegisterSummary["summaryFormatVersion"]!.GetValue<int>());
+        Assert.Equal("host-runtime", holdingRegisterSummary["sessionId"]!.GetValue<string>());
+        Assert.Equal(1, holdingRegisterSummary["unitId"]!.GetValue<int>());
+        Assert.Equal(3, holdingRegisterSummary["functionCode"]!.GetValue<int>());
+        Assert.Equal("0-1", holdingRegisterSummary["addressRange"]!.GetValue<string>());
+        Assert.Equal("zeroBasedPdu", holdingRegisterSummary["addressBase"]!.GetValue<string>());
+        Assert.Equal(1, holdingRegisterSummary["reads"]!.GetValue<int>());
+        Assert.Equal(0, holdingRegisterSummary["writes"]!.GetValue<int>());
+        Assert.Equal(1, holdingRegisterSummary["requests"]!.GetValue<int>());
+        Assert.Equal(1, holdingRegisterSummary["responses"]!.GetValue<int>());
+        Assert.Equal(0, holdingRegisterSummary["exceptions"]!.GetValue<int>());
+
+        var hostOutput = output.ToString();
+        Assert.Contains("Writing capture records to", hostOutput);
+        Assert.Contains("Writing Modbus analyzer summary to", hostOutput);
     }
 
     private static async Task<TcpClient> ConnectWithRetryAsync(

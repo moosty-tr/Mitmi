@@ -134,18 +134,29 @@ public static class CommandLineHost
             await using var eventSink = new BoundedSessionEventSink(
                 textWriterEventSink,
                 validationResult.RuntimeConfiguration!.Session.Id);
+            var startedAt = DateTimeOffset.UtcNow;
             await using var captureSink = CreateTrafficCaptureSink(
                 validationResult.RuntimeConfiguration!,
-                eventSink);
+                eventSink,
+                startedAt);
             if (captureSink is not null)
             {
                 await output.WriteLineAsync($"Writing capture records to {captureSink.CaptureFilePath}.");
             }
 
+            var analyzerSummarySink = CreateModbusAnalyzerSummarySink(
+                validationResult.RuntimeConfiguration!,
+                startedAt);
+            if (analyzerSummarySink is not null)
+            {
+                await output.WriteLineAsync($"Writing Modbus analyzer summary to {analyzerSummarySink.SummaryFilePath}.");
+            }
+
             var protocolTrafficObserverFactory = BuildProtocolTrafficObserverFactory(
                 validationResult.RuntimeConfiguration!,
                 eventSink,
-                captureSink);
+                captureSink,
+                analyzerSummarySink);
             var sessionMetricsSink = CreateSessionMetricsSink(
                 validationResult.RuntimeConfiguration!,
                 eventSink);
@@ -212,7 +223,8 @@ public static class CommandLineHost
 
     private static NdjsonTrafficCaptureSink? CreateTrafficCaptureSink(
         RuntimeConfiguration configuration,
-        ISessionEventSink eventSink)
+        ISessionEventSink eventSink,
+        DateTimeOffset startedAt)
     {
         if (!configuration.Capture.Enabled)
         {
@@ -222,7 +234,26 @@ public static class CommandLineHost
         return new NdjsonTrafficCaptureSink(
             configuration.Capture,
             eventSink,
-            DateTimeOffset.UtcNow);
+            startedAt);
+    }
+
+    private static NdjsonModbusAnalyzerSummarySink? CreateModbusAnalyzerSummarySink(
+        RuntimeConfiguration configuration,
+        DateTimeOffset startedAt)
+    {
+        if (!configuration.Capture.Enabled ||
+            !configuration.Session.Diagnostics.DecodeProtocol ||
+            !string.Equals(
+                configuration.Session.Protocol.Value,
+                ModbusTcpProtocolPlugin.ProtocolId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return new NdjsonModbusAnalyzerSummarySink(
+            configuration.Capture,
+            startedAt);
     }
 
     private static async Task<int> ExportDiagnosticsBundleAsync(
@@ -330,7 +361,8 @@ public static class CommandLineHost
     private static IProtocolTrafficObserverFactory? BuildProtocolTrafficObserverFactory(
         RuntimeConfiguration configuration,
         ISessionEventSink eventSink,
-        ITrafficCaptureSink? trafficCaptureSink)
+        ITrafficCaptureSink? trafficCaptureSink,
+        IModbusTcpAnalyzerSummarySink? analyzerSummarySink)
     {
         if (!configuration.Session.Diagnostics.DecodeProtocol)
         {
@@ -346,7 +378,8 @@ public static class CommandLineHost
                 new ModbusTcpTrafficObserverFactory(
                     eventSink,
                     trafficCaptureSink,
-                    configuration.Session.Diagnostics.CaptureRawPayloads),
+                    configuration.Session.Diagnostics.CaptureRawPayloads,
+                    analyzerSummarySink),
                 eventSink);
         }
 
