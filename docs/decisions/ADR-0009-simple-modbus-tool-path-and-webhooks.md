@@ -20,6 +20,10 @@ Bridging remains possible, but it should stay late in the roadmap because it req
 
 Webhook integrations are accepted as a candidate future capability, but not as part of the current report slice. Webhooks should be designed as an explicit integration feature that builds on reliable Modbus analyzer state.
 
+The initial observed-value state model is specified in:
+
+- `docs/architecture/modbus-observed-value-state-model.md`
+
 Initial webhook direction:
 
 - Trigger on any observed value update.
