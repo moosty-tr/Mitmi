@@ -106,6 +106,16 @@ public static class CommandLineHost
             return ExitCodes.Success;
         }
 
+        if (options.DiagnosticsBundlePath is not null)
+        {
+            return await ExportDiagnosticsBundleAsync(
+                validationResult.RuntimeConfiguration!,
+                options.DiagnosticsBundlePath,
+                output,
+                error,
+                cancellationToken);
+        }
+
         await output.WriteLineAsync("Starting diagnostic session. Press Ctrl+C to stop.");
         using var shutdown = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
@@ -213,6 +223,28 @@ public static class CommandLineHost
             configuration.Capture,
             eventSink,
             DateTimeOffset.UtcNow);
+    }
+
+    private static async Task<int> ExportDiagnosticsBundleAsync(
+        RuntimeConfiguration configuration,
+        string bundlePath,
+        TextWriter output,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var resolvedBundlePath = Path.GetFullPath(bundlePath);
+            await DiagnosticsBundleExporter.ExportAsync(configuration, resolvedBundlePath, cancellationToken);
+            await output.WriteLineAsync($"Created diagnostics bundle at {resolvedBundlePath}.");
+            return ExitCodes.Success;
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            await error.WriteLineAsync($"Diagnostics bundle failed: {exception.Message}");
+            return ExitCodes.RuntimeFailure;
+        }
     }
 
     private static ISessionMetricsSink? CreateSessionMetricsSink(
@@ -368,6 +400,7 @@ public static class CommandLineHost
         writer.WriteLine("Usage:");
         writer.WriteLine("  mitmi [--config <path>] [--validate-config]");
         writer.WriteLine("  mitmi --init-config [--config <path>]");
+        writer.WriteLine("  mitmi --bundle-diagnostics <zip-path> [--config <path>]");
         writer.WriteLine($"  Default config: {DefaultConfigurationFileName} beside the application executable.");
     }
 }

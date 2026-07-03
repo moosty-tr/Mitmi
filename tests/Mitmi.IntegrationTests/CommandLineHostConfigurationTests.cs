@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Text.Json.Nodes;
 using Mitmi.Host.Console;
 
 namespace Mitmi.IntegrationTests;
@@ -150,6 +152,89 @@ public sealed class CommandLineHostConfigurationTests
         Assert.NotEqual(0, exitCode);
         Assert.Empty(output.ToString());
         Assert.Contains("--init-config cannot be combined with --validate-config.", error.ToString());
+    }
+
+    [Fact]
+    public async Task RunAsync_bundle_diagnostics_creates_zip_with_config_log_capture_and_manifest()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var configPath = Path.Combine(tempDirectory.Path, "mitmi.config.json");
+        var logPath = Path.Combine(tempDirectory.Path, "logs", "mitmi.log");
+        var capturePath = Path.Combine(tempDirectory.Path, "captures", "mitmi-capture-test.ndjson");
+        var bundlePath = Path.Combine(tempDirectory.Path, "support", "mitmi-diagnostics.zip");
+
+        await File.WriteAllTextAsync(configPath, ValidConfigurationJson("bundle"));
+        Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+        await File.WriteAllTextAsync(logPath, "protocol.analyzer_summary sample");
+        Directory.CreateDirectory(Path.GetDirectoryName(capturePath)!);
+        await File.WriteAllTextAsync(capturePath, """{"captureFormatVersion":1}""");
+
+        var exitCode = await CommandLineHost.RunAsync(
+            ["--config", configPath, "--bundle-diagnostics", bundlePath],
+            output,
+            error,
+            applicationDirectory: tempDirectory.Path);
+
+        Assert.Equal(0, exitCode);
+        Assert.True(File.Exists(bundlePath));
+        Assert.Contains("Created diagnostics bundle", output.ToString());
+        Assert.Empty(error.ToString());
+
+        using var archive = ZipFile.OpenRead(bundlePath);
+        Assert.Contains(archive.Entries, entry => entry.FullName == "configuration/mitmi.config.json");
+        Assert.Contains(archive.Entries, entry => entry.FullName == "logs/mitmi.log");
+        Assert.Contains(archive.Entries, entry => entry.FullName == "captures/mitmi-capture-test.ndjson");
+
+        var manifestEntry = Assert.Single(archive.Entries, entry => entry.FullName == "manifest.json");
+        await using var manifestStream = manifestEntry.Open();
+        var manifest = JsonNode.Parse(manifestStream)!.AsObject();
+        Assert.Equal(1, manifest["BundleManifestVersion"]!.GetValue<int>());
+        Assert.Equal("bundle", manifest["SessionId"]!.GetValue<string>());
+        Assert.Equal("modbus-tcp", manifest["ProtocolId"]!.GetValue<string>());
+        Assert.Equal(bundlePath, manifest["BundlePath"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task RunAsync_bundle_diagnostics_refuses_to_overwrite_existing_bundle()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var configPath = Path.Combine(tempDirectory.Path, "mitmi.config.json");
+        var bundlePath = Path.Combine(tempDirectory.Path, "mitmi-diagnostics.zip");
+
+        await File.WriteAllTextAsync(configPath, ValidConfigurationJson("existing-bundle"));
+        await File.WriteAllTextAsync(bundlePath, "existing");
+
+        var exitCode = await CommandLineHost.RunAsync(
+            ["--config", configPath, "--bundle-diagnostics", bundlePath],
+            output,
+            error,
+            applicationDirectory: tempDirectory.Path);
+
+        Assert.NotEqual(0, exitCode);
+        Assert.Contains("Diagnostics bundle failed", error.ToString());
+        Assert.Contains("already exists", error.ToString());
+    }
+
+    [Fact]
+    public async Task RunAsync_rejects_bundle_diagnostics_with_validate_config()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        var exitCode = await CommandLineHost.RunAsync(
+            ["--bundle-diagnostics", "mitmi.zip", "--validate-config"],
+            output,
+            error,
+            applicationDirectory: tempDirectory.Path);
+
+        Assert.NotEqual(0, exitCode);
+        Assert.Empty(output.ToString());
+        Assert.Contains("--validate-config cannot be combined with --bundle-diagnostics.", error.ToString());
     }
 
     private static string ValidConfigurationJson(string sessionId) =>

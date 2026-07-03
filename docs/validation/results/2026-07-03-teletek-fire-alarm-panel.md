@@ -49,3 +49,20 @@ The slice should start with conservative Modbus PDU interpretation:
 - Per-session aggregation by unit ID, function, operation, address range, and direction.
 
 The implementation should label Modbus addresses carefully. Protocol Data Unit addresses are zero-based offsets, while device manuals may use one-based or `3xxxx`/`4xxxx` reference notation.
+
+## Analyzer Follow-Up Validation
+
+After the Modbus protocol-analyzer slice was implemented, the operator repeated the physical Teletek panel test.
+
+Result: passed.
+
+Confirmed behavior:
+
+- Protocol analyzer details worked with the Teletek fire alarm panel.
+- The session summary log matched the intended engineer workflow.
+- The operator confirmed the summary is the kind of device-discovery report an engineer needs.
+
+Follow-up product direction:
+
+- Keep the analyzer summary as a first-class field artifact.
+- Make logs, captures, and analyzer summaries easy to collect after a field run.

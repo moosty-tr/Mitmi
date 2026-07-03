@@ -4,6 +4,7 @@ internal sealed class CliOptions
 {
     private CliOptions(
         string? configurationPath,
+        string? diagnosticsBundlePath,
         bool hasExplicitConfigurationPath,
         bool initConfig,
         bool validateConfig,
@@ -11,6 +12,7 @@ internal sealed class CliOptions
         IReadOnlyList<string> errors)
     {
         ConfigurationPath = configurationPath;
+        DiagnosticsBundlePath = diagnosticsBundlePath;
         HasExplicitConfigurationPath = hasExplicitConfigurationPath;
         InitConfig = initConfig;
         ValidateConfig = validateConfig;
@@ -19,6 +21,8 @@ internal sealed class CliOptions
     }
 
     public string? ConfigurationPath { get; }
+
+    public string? DiagnosticsBundlePath { get; }
 
     public bool HasExplicitConfigurationPath { get; }
 
@@ -34,6 +38,7 @@ internal sealed class CliOptions
     {
         var errors = new List<string>();
         string? configurationPath = null;
+        string? diagnosticsBundlePath = null;
         var hasExplicitConfigurationPath = false;
         var initConfig = false;
         var validateConfig = false;
@@ -55,6 +60,16 @@ internal sealed class CliOptions
 
                 case "--init-config":
                     initConfig = true;
+                    break;
+
+                case "--bundle-diagnostics":
+                    if (index + 1 >= args.Count)
+                    {
+                        errors.Add("--bundle-diagnostics requires a path value.");
+                        break;
+                    }
+
+                    diagnosticsBundlePath = args[++index];
                     break;
 
                 case "--config":
@@ -79,6 +94,23 @@ internal sealed class CliOptions
             errors.Add("--init-config cannot be combined with --validate-config.");
         }
 
-        return new CliOptions(configurationPath, hasExplicitConfigurationPath, initConfig, validateConfig, showHelp, errors);
+        if (initConfig && diagnosticsBundlePath is not null)
+        {
+            errors.Add("--init-config cannot be combined with --bundle-diagnostics.");
+        }
+
+        if (validateConfig && diagnosticsBundlePath is not null)
+        {
+            errors.Add("--validate-config cannot be combined with --bundle-diagnostics.");
+        }
+
+        return new CliOptions(
+            configurationPath,
+            diagnosticsBundlePath,
+            hasExplicitConfigurationPath,
+            initConfig,
+            validateConfig,
+            showHelp,
+            errors);
     }
 }
