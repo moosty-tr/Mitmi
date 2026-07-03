@@ -73,7 +73,8 @@ mitmi --config path\to\mitmi.config.json --validate-config
 7. Change a safe simulator/device value if available and confirm the client sees the update through MITMI.
 8. Stop the client.
 9. Stop MITMI with normal console cancellation.
-10. Preserve the MITMI configuration, file log, capture file, and notes about network topology.
+10. Export a diagnostics bundle if this is a support or release-readiness run.
+11. Preserve the MITMI configuration, file log, capture files, analyzer summary, diagnostics bundle if exported, and notes about network topology.
 
 ## Pass Criteria
 
@@ -83,8 +84,10 @@ mitmi --config path\to\mitmi.config.json --validate-config
 - Values returned through MITMI match direct-client expectations.
 - File log contains connection lifecycle events.
 - File log contains `protocol.frame_decoded` and `protocol.transaction_matched` events.
+- File log contains `protocol.analyzer_summary` events with unit ID, function, address range, and read/write counts.
 - Capture file contains `trafficChunk` records in both directions.
 - Capture file contains `protocolFrame` records with Modbus metadata and correlation IDs.
+- Analyzer summary exists under `captures/summaries` and contains observed Modbus functions, zero-based address ranges, request/response counts, and read/write counts.
 - Shutdown emits normal listener/session stop events.
 - No capture, diagnostics, or session event loss warnings appear during the short run.
 
@@ -96,6 +99,7 @@ mitmi --config path\to\mitmi.config.json --validate-config
 - Frequent decode warnings appear for known-good traffic.
 - Capture output is missing, empty, or missing one direction.
 - MITMI shutdown leaves files unwritten or incomplete.
+- Analyzer summary is missing after a run that produced decoded Modbus transactions.
 - Operator cannot identify the active log and capture paths from startup output.
 
 ## Evidence To Keep
@@ -108,6 +112,8 @@ mitmi --config path\to\mitmi.config.json --validate-config
 - Start and stop timestamps.
 - File log.
 - Capture NDJSON file.
+- Modbus analyzer summary NDJSON file.
+- Diagnostics bundle zip, if exported.
 - Any firewall or interface binding changes made for the test.
 
 ## Physical-Test Decision
