@@ -2,7 +2,7 @@ using Mitmi.Domain;
 
 namespace Mitmi.Application.Sessions;
 
-public sealed class BoundedProtocolTrafficObserverFactory : IProtocolTrafficObserverFactory
+public sealed class BoundedProtocolTrafficObserverFactory : IProtocolTrafficObserverFactory, IAsyncDisposable
 {
     private readonly IProtocolTrafficObserverFactory innerFactory;
     private readonly ISessionEventSink eventSink;
@@ -30,5 +30,13 @@ public sealed class BoundedProtocolTrafficObserverFactory : IProtocolTrafficObse
             sessionId,
             connectionId,
             capacity);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (innerFactory is IAsyncDisposable asyncDisposableFactory)
+        {
+            await asyncDisposableFactory.DisposeAsync();
+        }
     }
 }

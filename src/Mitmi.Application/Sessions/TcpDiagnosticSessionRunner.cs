@@ -115,6 +115,12 @@ public sealed class TcpDiagnosticSessionRunner
                     CancellationToken.None);
             }
 
+            await DisposeProtocolTrafficObserverFactoryAsync(
+                trafficObserverFactory,
+                eventSink,
+                session.Id,
+                CancellationToken.None);
+
             await EmitAsync(
                 eventSink,
                 SessionEventLevel.Info,
@@ -534,6 +540,35 @@ public sealed class TcpDiagnosticSessionRunner
                 sessionId,
                 connectionId,
                 $"Protocol diagnostics failed while flushing observations: {exception.Message}",
+                exception,
+            cancellationToken);
+        }
+    }
+
+    private static async ValueTask DisposeProtocolTrafficObserverFactoryAsync(
+        IProtocolTrafficObserverFactory? trafficObserverFactory,
+        ISessionEventSink eventSink,
+        SessionId sessionId,
+        CancellationToken cancellationToken)
+    {
+        if (trafficObserverFactory is not IAsyncDisposable asyncDisposableFactory)
+        {
+            return;
+        }
+
+        try
+        {
+            await asyncDisposableFactory.DisposeAsync();
+        }
+        catch (Exception exception)
+        {
+            await EmitAsync(
+                eventSink,
+                SessionEventLevel.Warning,
+                SessionEventNames.ProtocolObserverFailed,
+                sessionId,
+                connectionId: null,
+                $"Protocol diagnostics failed while flushing session summary: {exception.Message}",
                 exception,
                 cancellationToken);
         }

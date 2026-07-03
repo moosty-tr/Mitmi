@@ -14,15 +14,18 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
     private readonly ModbusTcpTransactionCorrelator transactionCorrelator = new();
     private readonly bool captureRawPayloads;
     private readonly ITrafficCaptureSink? trafficCaptureSink;
+    private readonly ModbusTcpAnalyzerSessionSummary? analyzerSessionSummary;
 
     public ModbusTcpTrafficObserver(
         ISessionEventSink eventSink,
         ITrafficCaptureSink? trafficCaptureSink = null,
-        bool captureRawPayloads = false)
+        bool captureRawPayloads = false,
+        ModbusTcpAnalyzerSessionSummary? analyzerSessionSummary = null)
     {
         this.eventSink = eventSink;
         this.trafficCaptureSink = trafficCaptureSink;
         this.captureRawPayloads = captureRawPayloads;
+        this.analyzerSessionSummary = analyzerSessionSummary;
     }
 
     public async ValueTask ObserveAsync(
@@ -64,8 +67,23 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
                 }
 
                 var transactionEvent = transactionCorrelator.Observe(frame);
-                await EmitTransactionEventAsync(observation, transactionEvent, cancellationToken);
-                await CaptureFrameAsync(observation, frame, transactionEvent, cancellationToken);
+                var frameAnalysis = ModbusTcpPduAnalyzer.Analyze(frame, transactionEvent.RequestFrame);
+                var transactionAnalysis = ModbusTcpPduAnalyzer.Analyze(
+                    transactionEvent.Frame,
+                    transactionEvent.RequestFrame);
+                analyzerSessionSummary?.Observe(frame, frameAnalysis);
+
+                await EmitTransactionEventAsync(
+                    observation,
+                    transactionEvent,
+                    transactionAnalysis,
+                    cancellationToken);
+                await CaptureFrameAsync(
+                    observation,
+                    frame,
+                    transactionEvent,
+                    frameAnalysis,
+                    cancellationToken);
             }
         }
         finally
@@ -78,6 +96,7 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
         ProtocolTrafficObservation observation,
         ModbusTcpFrame frame,
         ModbusTcpTransactionEvent transactionEvent,
+        ModbusTcpPduAnalysis analysis,
         CancellationToken cancellationToken)
     {
         if (trafficCaptureSink is null)
@@ -97,7 +116,7 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
                     frame.RawFrame.Length,
                     captureRawPayloads ? frame.RawFrame : null,
                     transactionEvent.CorrelationId,
-                    BuildProtocolMetadata(frame, transactionEvent),
+                    BuildProtocolMetadata(frame, transactionEvent, analysis),
                     BuildDecodeWarnings(frame, transactionEvent),
                     TrafficCaptureRecordKind.ProtocolFrame),
                 cancellationToken);
@@ -138,6 +157,7 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
     private async ValueTask EmitTransactionEventAsync(
         ProtocolTrafficObservation observation,
         ModbusTcpTransactionEvent transactionEvent,
+        ModbusTcpPduAnalysis analysis,
         CancellationToken cancellationToken)
     {
         var eventName = transactionEvent.Kind switch
@@ -160,7 +180,7 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
                 eventName,
                 observation.SessionId,
                 observation.ConnectionId,
-                RenderTransactionMessage(transactionEvent)),
+                RenderTransactionMessage(transactionEvent, analysis)),
             cancellationToken);
 
         foreach (var warning in transactionEvent.Warnings)
@@ -173,18 +193,20 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
         }
     }
 
-    private static string RenderTransactionMessage(ModbusTcpTransactionEvent transactionEvent)
+    private static string RenderTransactionMessage(
+        ModbusTcpTransactionEvent transactionEvent,
+        ModbusTcpPduAnalysis analysis)
     {
         return transactionEvent.Kind switch
         {
             ModbusTcpTransactionEventKind.RequestObserved =>
-                $"Observed Modbus request correlation={transactionEvent.CorrelationId} function={FormatFunction(transactionEvent.Frame)}.",
+                $"Observed Modbus request correlation={transactionEvent.CorrelationId} function={FormatFunction(transactionEvent.Frame)} {FormatAnalysis(analysis)}.",
             ModbusTcpTransactionEventKind.ResponseAwaitingRequest =>
-                $"Observed Modbus response before matching request diagnostics correlation={transactionEvent.CorrelationId} function={FormatFunction(transactionEvent.Frame)}.",
+                $"Observed Modbus response before matching request diagnostics correlation={transactionEvent.CorrelationId} function={FormatFunction(transactionEvent.Frame)} {FormatAnalysis(analysis)}.",
             ModbusTcpTransactionEventKind.ResponseMatched =>
-                $"Matched Modbus response correlation={transactionEvent.CorrelationId} function={FormatFunction(transactionEvent.Frame)} exception={transactionEvent.Frame.IsExceptionResponse}.",
+                $"Matched Modbus response correlation={transactionEvent.CorrelationId} function={FormatFunction(transactionEvent.Frame)} exception={transactionEvent.Frame.IsExceptionResponse} {FormatAnalysis(analysis)}.",
             ModbusTcpTransactionEventKind.ResponseWithoutRequest =>
-                $"Observed Modbus response without pending request correlation={transactionEvent.CorrelationId} function={FormatFunction(transactionEvent.Frame)}.",
+                $"Observed Modbus response without pending request correlation={transactionEvent.CorrelationId} function={FormatFunction(transactionEvent.Frame)} {FormatAnalysis(analysis)}.",
             _ =>
                 $"Observed Modbus transaction event correlation={transactionEvent.CorrelationId}."
         };
@@ -216,7 +238,8 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
 
     private static IReadOnlyDictionary<string, string> BuildProtocolMetadata(
         ModbusTcpFrame frame,
-        ModbusTcpTransactionEvent transactionEvent)
+        ModbusTcpTransactionEvent transactionEvent,
+        ModbusTcpPduAnalysis analysis)
     {
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -227,12 +250,39 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
             ["functionCode"] = frame.FunctionCode.ToString(CultureInfo.InvariantCulture),
             ["operationFunctionCode"] = frame.OperationFunctionCode.ToString(CultureInfo.InvariantCulture),
             ["isExceptionResponse"] = frame.IsExceptionResponse ? "true" : "false",
-            ["transactionEventKind"] = FormatTransactionEventKind(transactionEvent.Kind)
+            ["transactionEventKind"] = FormatTransactionEventKind(transactionEvent.Kind),
+            ["operation"] = analysis.Operation,
+            ["addressBase"] = "zeroBasedPdu"
         };
 
         if (frame.ExceptionCode is { } exceptionCode)
         {
             metadata["exceptionCode"] = exceptionCode.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (analysis.Address is { } address)
+        {
+            metadata["address"] = address.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (analysis.Quantity is { } quantity)
+        {
+            metadata["quantity"] = quantity.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (!string.IsNullOrWhiteSpace(analysis.AddressRange))
+        {
+            metadata["addressRange"] = analysis.AddressRange;
+        }
+
+        if (!string.IsNullOrWhiteSpace(analysis.ValuesHex))
+        {
+            metadata["valuesHex"] = analysis.ValuesHex;
+        }
+
+        if (analysis.ByteCount is { } byteCount)
+        {
+            metadata["byteCount"] = byteCount.ToString(CultureInfo.InvariantCulture);
         }
 
         return metadata;
@@ -260,5 +310,46 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
             ModbusTcpTransactionEventKind.ResponseWithoutRequest => "responseWithoutRequest",
             _ => kind.ToString()
         };
+    }
+
+    private static string FormatAnalysis(ModbusTcpPduAnalysis analysis)
+    {
+        var parts = new List<string>
+        {
+            $"operation={analysis.Operation}"
+        };
+
+        if (analysis.Address is { } address)
+        {
+            parts.Add($"address={address.ToString(CultureInfo.InvariantCulture)}");
+            parts.Add("address_base=zeroBasedPdu");
+        }
+
+        if (analysis.Quantity is { } quantity)
+        {
+            parts.Add($"quantity={quantity.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(analysis.AddressRange))
+        {
+            parts.Add($"address_range={analysis.AddressRange}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(analysis.ValuesHex))
+        {
+            parts.Add($"values={analysis.ValuesHex}");
+        }
+
+        if (analysis.ByteCount is { } byteCount)
+        {
+            parts.Add($"byte_count={byteCount.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        if (analysis.ExceptionCode is { } exceptionCode)
+        {
+            parts.Add($"exception_code={exceptionCode.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        return string.Join(" ", parts);
     }
 }

@@ -58,6 +58,12 @@ public sealed class CommandLineHostRuntimeIntegrationTests
         Assert.True(File.Exists(logPath));
         var fileLog = await File.ReadAllTextAsync(logPath);
         Assert.Contains("protocol.transaction_matched", fileLog);
+        Assert.Contains("operation=readHoldingRegisters", fileLog);
+        Assert.Contains("address=0", fileLog);
+        Assert.Contains("quantity=2", fileLog);
+        Assert.Contains("values=1111,2222", fileLog);
+        Assert.Contains("protocol.analyzer_summary", fileLog);
+        Assert.Contains("address_range=0-1", fileLog);
         Assert.Contains("metrics.session_summary", fileLog);
 
         var captureFile = Assert.Single(Directory.GetFiles(
@@ -78,6 +84,12 @@ public sealed class CommandLineHostRuntimeIntegrationTests
         var protocolMetadata = protocolFrame["protocolMetadata"]!.AsObject();
         Assert.Equal("3", protocolMetadata["functionCode"]!.GetValue<string>());
         Assert.Equal("responseMatched", protocolMetadata["transactionEventKind"]!.GetValue<string>());
+        Assert.Equal("readHoldingRegisters", protocolMetadata["operation"]!.GetValue<string>());
+        Assert.Equal("zeroBasedPdu", protocolMetadata["addressBase"]!.GetValue<string>());
+        Assert.Equal("0", protocolMetadata["address"]!.GetValue<string>());
+        Assert.Equal("2", protocolMetadata["quantity"]!.GetValue<string>());
+        Assert.Equal("0-1", protocolMetadata["addressRange"]!.GetValue<string>());
+        Assert.Equal("1111,2222", protocolMetadata["valuesHex"]!.GetValue<string>());
         Assert.All(captureDocuments, document =>
         {
             Assert.Equal(1, document["captureFormatVersion"]!.GetValue<int>());

@@ -17,6 +17,7 @@ public static class SessionEventNames
     public const string MetricsSessionSummary = "metrics.session_summary";
     public const string MetricsSinkFailed = "metrics.sink_failed";
     public const string ProtocolDecodeWarning = "protocol.decode_warning";
+    public const string ProtocolAnalyzerSummary = "protocol.analyzer_summary";
     public const string ProtocolFrameDecoded = "protocol.frame_decoded";
     public const string ProtocolObservationDropped = "protocol.observation_dropped";
     public const string ProtocolObservationLossSummary = "protocol.observation_loss_summary";

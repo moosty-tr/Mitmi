@@ -46,6 +46,10 @@ public sealed class ModbusTcpProxyIntegrationTests
 
         var matched = await eventSink.WaitForAsync(SessionEventNames.ProtocolTransactionMatched, timeout.Token);
         Assert.Contains("function=3", matched.Message);
+        Assert.Contains("operation=readHoldingRegisters", matched.Message);
+        Assert.Contains("address=0", matched.Message);
+        Assert.Contains("quantity=2", matched.Message);
+        Assert.Contains("values=1234,5678", matched.Message);
         Assert.Contains("exception=False", matched.Message);
         Assert.Contains(eventSink.Events, sessionEvent => sessionEvent.Name == SessionEventNames.ProtocolFrameDecoded);
         Assert.Contains(eventSink.Events, sessionEvent => sessionEvent.Name == SessionEventNames.ProtocolTransactionObserved);
@@ -55,6 +59,13 @@ public sealed class ModbusTcpProxyIntegrationTests
 
         await runnerCancellation.CancelAsync();
         await runnerTask.WaitAsync(timeout.Token);
+        Assert.Contains(
+            eventSink.Events,
+            sessionEvent =>
+                sessionEvent.Name == SessionEventNames.ProtocolAnalyzerSummary &&
+                sessionEvent.Message.Contains("operation=readHoldingRegisters") &&
+                sessionEvent.Message.Contains("address_range=0-1") &&
+                sessionEvent.Message.Contains("reads=1"));
         await timeout.CancelAsync();
         await IgnoreExpectedShutdownAsync(slaveTask);
     }
