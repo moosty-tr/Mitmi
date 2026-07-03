@@ -24,6 +24,10 @@ The initial observed-value state model is specified in:
 
 - `docs/architecture/modbus-observed-value-state-model.md`
 
+The initial webhook delivery design is specified in:
+
+- `docs/architecture/observed-value-webhook-delivery-design.md`
+
 Initial webhook direction:
 
 - Trigger on any observed value update.
