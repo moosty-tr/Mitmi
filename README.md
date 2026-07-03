@@ -39,6 +39,14 @@ dotnet restore Mitmi.slnx
 dotnet test Mitmi.slnx --no-restore
 ```
 
+Run the release smoke test before handing a build to an operator:
+
+```text
+.\scripts\Invoke-ReleaseSmokeTest.ps1
+```
+
+The smoke test publishes the console host to a clean temporary folder and runs the published executable through `--help`, `--init-config`, `--validate-config`, and `--bundle-diagnostics`.
+
 ## Quick Start
 
 Create a configuration file:
