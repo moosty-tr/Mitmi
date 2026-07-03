@@ -85,16 +85,27 @@ public static class CommandLineHost
             return ExitCodes.ConfigurationInvalid;
         }
 
+        var configurationDocument = parseResult.Document!;
         var protocolRegistry = BuildProtocolRegistry();
         var context = ConfigurationValidationContext.ForFile(
             configurationPath,
             protocolRegistry,
             warnOnPrivilegedPorts: !OperatingSystem.IsWindows());
 
-        var validationResult = new ConfigurationValidator().Validate(parseResult.Document, context);
+        var validationResult = new ConfigurationValidator().Validate(configurationDocument, context);
         if (validationResult.HasErrors)
         {
             RenderIssues(error, validationResult.Issues);
+            return ExitCodes.ConfigurationInvalid;
+        }
+
+        var protocolOptionIssues = new List<ConfigurationIssue>();
+        var modbusReportAddressOptions = ModbusReportAddressOptions.FromProtocolOptions(
+            configurationDocument.Session!.ProtocolOptions,
+            protocolOptionIssues);
+        if (protocolOptionIssues.Count > 0)
+        {
+            RenderIssues(error, protocolOptionIssues);
             return ExitCodes.ConfigurationInvalid;
         }
 
@@ -146,7 +157,8 @@ public static class CommandLineHost
 
             var analyzerArtifactsSink = CreateModbusAnalyzerArtifactsSink(
                 validationResult.RuntimeConfiguration!,
-                startedAt);
+                startedAt,
+                modbusReportAddressOptions);
             if (analyzerArtifactsSink is not null)
             {
                 await output.WriteLineAsync($"Writing Modbus analyzer summary to {analyzerArtifactsSink.SummaryFilePath}.");
@@ -240,7 +252,8 @@ public static class CommandLineHost
 
     private static ModbusAnalyzerArtifactsSink? CreateModbusAnalyzerArtifactsSink(
         RuntimeConfiguration configuration,
-        DateTimeOffset startedAt)
+        DateTimeOffset startedAt,
+        ModbusReportAddressOptions reportAddressOptions)
     {
         if (!configuration.Capture.Enabled ||
             !configuration.Session.Diagnostics.DecodeProtocol ||
@@ -254,7 +267,8 @@ public static class CommandLineHost
 
         return new ModbusAnalyzerArtifactsSink(
             configuration,
-            startedAt);
+            startedAt,
+            reportAddressOptions);
     }
 
     private static async Task<int> ExportDiagnosticsBundleAsync(

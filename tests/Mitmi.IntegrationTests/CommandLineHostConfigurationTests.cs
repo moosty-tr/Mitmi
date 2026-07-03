@@ -253,7 +253,44 @@ public sealed class CommandLineHostConfigurationTests
         Assert.Contains("--validate-config cannot be combined with --bundle-diagnostics.", error.ToString());
     }
 
-    private static string ValidConfigurationJson(string sessionId) =>
+    [Fact]
+    public async Task RunAsync_rejects_modbus_report_address_columns_without_zero_based_pdu()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var configPath = Path.Combine(tempDirectory.Path, "mitmi.config.json");
+        await File.WriteAllTextAsync(
+            configPath,
+            ValidConfigurationJson(
+                "invalid-report-columns",
+                """
+                ,
+                "protocolOptions": {
+                  "modbus-tcp": {
+                    "reportAddressColumns": [
+                      "oneBased",
+                      "reference"
+                    ]
+                  }
+                }
+                """));
+
+        var exitCode = await CommandLineHost.RunAsync(
+            ["--config", configPath, "--validate-config"],
+            output,
+            error,
+            applicationDirectory: tempDirectory.Path);
+
+        Assert.NotEqual(0, exitCode);
+        Assert.Empty(output.ToString());
+        Assert.Contains("INVALID_PROTOCOL_OPTIONS", error.ToString());
+        Assert.Contains("zeroBasedPdu", error.ToString());
+    }
+
+    private static string ValidConfigurationJson(
+        string sessionId,
+        string sessionTailJson = "") =>
         $$"""
           {
             "configurationVersion": 1,
@@ -294,6 +331,7 @@ public sealed class CommandLineHostConfigurationTests
                 "decodeProtocol": true,
                 "captureRawPayloads": true
               }
+              {{sessionTailJson}}
             }
           }
           """;

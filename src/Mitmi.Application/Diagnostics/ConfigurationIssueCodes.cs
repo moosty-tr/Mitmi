@@ -13,6 +13,7 @@ public static class ConfigurationIssueCodes
     public const string InvalidJson = "INVALID_JSON";
     public const string InvalidListenEndpoint = "INVALID_LISTEN_ENDPOINT";
     public const string InvalidLoggingLevel = "INVALID_LOGGING_LEVEL";
+    public const string InvalidProtocolOptions = "INVALID_PROTOCOL_OPTIONS";
     public const string InvalidUpstreamEndpoint = "INVALID_UPSTREAM_ENDPOINT";
     public const string MissingConfiguration = "MISSING_CONFIGURATION";
     public const string MissingConfigurationFile = "MISSING_CONFIGURATION_FILE";

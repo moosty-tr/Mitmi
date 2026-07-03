@@ -53,6 +53,7 @@ Before starting MITMI:
 - `session.protocol` is `modbus-tcp`.
 - `session.diagnostics.decodeProtocol` is `true`.
 - `session.diagnostics.captureRawPayloads` is `true` for validation runs.
+- `session.protocolOptions["modbus-tcp"].reportAddressColumns` includes `zeroBasedPdu`; add `oneBased` or `reference` when those columns help compare with device manuals.
 - `capture.enabled` is `true`.
 - `logging.file.enabled` is `true`.
 
@@ -88,7 +89,7 @@ mitmi --config path\to\mitmi.config.json --validate-config
 - Capture file contains `trafficChunk` records in both directions.
 - Capture file contains `protocolFrame` records with Modbus metadata and correlation IDs.
 - Analyzer summary exists under `captures/summaries` and contains observed Modbus functions, zero-based address ranges, request/response counts, and read/write counts.
-- Discovery report exists under `captures/reports` and summarizes observed Modbus functions and zero-based address ranges in a human-readable table.
+- Discovery report exists under `captures/reports` and summarizes observed Modbus functions and configured address columns in a human-readable table. The zero-based PDU address range must remain present.
 - Shutdown emits normal listener/session stop events.
 - No capture, diagnostics, or session event loss warnings appear during the short run.
 

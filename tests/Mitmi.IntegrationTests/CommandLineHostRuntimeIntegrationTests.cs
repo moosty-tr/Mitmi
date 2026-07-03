@@ -127,7 +127,7 @@ public sealed class CommandLineHostRuntimeIntegrationTests
         Assert.Contains("# MITMI Modbus Device Discovery Report", discoveryReport);
         Assert.Contains($"- Upstream device: 127.0.0.1:{upstreamPort}", discoveryReport);
         Assert.Contains("| 1 | 3 | readHoldingRegisters | 0-1 | 2 | 1 | 0 | 1 | 1 | 0 |", discoveryReport);
-        Assert.Contains("Addresses are Modbus Protocol Data Unit offsets.", discoveryReport);
+        Assert.Contains("PDU address ranges are zero-based Modbus Protocol Data Unit offsets.", discoveryReport);
 
         var hostOutput = output.ToString();
         Assert.Contains("Writing capture records to", hostOutput);

@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Mitmi.Application.Configuration;
 
 public sealed class SessionConfigurationDocument
@@ -11,4 +13,6 @@ public sealed class SessionConfigurationDocument
     public EndpointConfigurationDocument? UpstreamEndpoint { get; init; }
 
     public SessionDiagnosticsConfigurationDocument? Diagnostics { get; init; }
+
+    public IReadOnlyDictionary<string, JsonElement>? ProtocolOptions { get; init; }
 }

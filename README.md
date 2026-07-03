@@ -61,6 +61,7 @@ Edit the generated file:
 - `session.upstreamEndpoint` is the original Modbus TCP device or server.
 - `logging.file.path` is the file log path.
 - `capture.outputPath` is where capture and analyzer summary artifacts are written.
+- `session.protocolOptions["modbus-tcp"].reportAddressColumns` controls the address columns in discovery reports.
 
 Validate configuration before starting the proxy:
 
@@ -85,7 +86,7 @@ Default paths are relative to the configuration file directory.
 - `logs/mitmi.log`: human-readable session, connection, protocol, analyzer, warning, and metrics events.
 - `captures/mitmi-capture-*.ndjson`: versioned traffic capture records with raw payloads when enabled, plus protocol-frame metadata when decoding is enabled.
 - `captures/summaries/mitmi-modbus-analyzer-summary-*.ndjson`: machine-readable Modbus function, unit, address range, and read/write count summary records.
-- `captures/reports/mitmi-modbus-device-discovery-*.md`: human-readable Modbus device-discovery report for field review.
+- `captures/reports/mitmi-modbus-device-discovery-*.md`: human-readable Modbus device-discovery report for field review. Zero-based PDU addresses remain the source of truth; optional one-based and reference-style columns are controlled by `session.protocolOptions["modbus-tcp"].reportAddressColumns`.
 
 Useful event names to check in logs:
 

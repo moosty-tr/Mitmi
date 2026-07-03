@@ -36,6 +36,15 @@
     "diagnostics": {
       "decodeProtocol": true,
       "captureRawPayloads": true
+    },
+    "protocolOptions": {
+      "modbus-tcp": {
+        "reportAddressColumns": [
+          "zeroBasedPdu",
+          "oneBased",
+          "reference"
+        ]
+      }
     }
   }
 }

@@ -10,12 +10,17 @@ internal sealed class ModbusAnalyzerArtifactsSink : IModbusTcpAnalyzerSummarySin
 
     public ModbusAnalyzerArtifactsSink(
         RuntimeConfiguration configuration,
-        DateTimeOffset startedAt)
+        DateTimeOffset startedAt,
+        ModbusReportAddressOptions reportAddressOptions)
     {
         ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(reportAddressOptions);
 
         summarySink = new NdjsonModbusAnalyzerSummarySink(configuration.Capture, startedAt);
-        discoveryReportSink = new MarkdownModbusDeviceDiscoveryReportSink(configuration, startedAt);
+        discoveryReportSink = new MarkdownModbusDeviceDiscoveryReportSink(
+            configuration,
+            startedAt,
+            reportAddressOptions);
     }
 
     public string SummaryFilePath => summarySink.SummaryFilePath;
