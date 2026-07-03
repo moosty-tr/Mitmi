@@ -168,6 +168,11 @@ public sealed class CommandLineHostConfigurationTests
             "captures",
             "summaries",
             "mitmi-modbus-analyzer-summary-test.ndjson");
+        var discoveryReportPath = Path.Combine(
+            tempDirectory.Path,
+            "captures",
+            "reports",
+            "mitmi-modbus-device-discovery-test.md");
         var bundlePath = Path.Combine(tempDirectory.Path, "support", "mitmi-diagnostics.zip");
 
         await File.WriteAllTextAsync(configPath, ValidConfigurationJson("bundle"));
@@ -177,6 +182,8 @@ public sealed class CommandLineHostConfigurationTests
         await File.WriteAllTextAsync(capturePath, """{"captureFormatVersion":1}""");
         Directory.CreateDirectory(Path.GetDirectoryName(analyzerSummaryPath)!);
         await File.WriteAllTextAsync(analyzerSummaryPath, """{"summaryFormatVersion":1}""");
+        Directory.CreateDirectory(Path.GetDirectoryName(discoveryReportPath)!);
+        await File.WriteAllTextAsync(discoveryReportPath, "# MITMI Modbus Device Discovery Report");
 
         var exitCode = await CommandLineHost.RunAsync(
             ["--config", configPath, "--bundle-diagnostics", bundlePath],
@@ -194,6 +201,7 @@ public sealed class CommandLineHostConfigurationTests
         Assert.Contains(archive.Entries, entry => entry.FullName == "logs/mitmi.log");
         Assert.Contains(archive.Entries, entry => entry.FullName == "captures/mitmi-capture-test.ndjson");
         Assert.Contains(archive.Entries, entry => entry.FullName == "captures/summaries/mitmi-modbus-analyzer-summary-test.ndjson");
+        Assert.Contains(archive.Entries, entry => entry.FullName == "captures/reports/mitmi-modbus-device-discovery-test.md");
 
         var manifestEntry = Assert.Single(archive.Entries, entry => entry.FullName == "manifest.json");
         await using var manifestStream = manifestEntry.Open();

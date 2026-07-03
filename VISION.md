@@ -16,7 +16,9 @@ Current accepted decisions:
 - v0.1 should target engineer laptop deployment first, keeping install and runtime assumptions lightweight.
 - v0.1 requires clients to connect to MITMI's configured IP/port instead of the original PLC/server endpoint.
 - v0.1 should prefer minimum-latency forwarding, with diagnostic detail gathered asynchronously where practical.
-- Replay, fault simulation, caching, queuing, bridging, automation, and scripting remain important future directions, but they should not distract from proving that the diagnostic proxy works reliably first.
+- Replay and fault simulation are intentionally skipped for the current product direction to keep MITMI simple and diagnostics-focused.
+- Bridging remains a possible late-stage capability after the Modbus diagnostic workflow is mature.
+- Webhooks are a candidate future integration surface for observed Modbus value changes, but they should build on the analyzer/report model rather than bypass it.
 
 ## 1. Vision
 
@@ -30,9 +32,9 @@ Long-term product themes:
 
 - Observe industrial communication without changing normal system behavior.
 - Intercept traffic when explicitly configured to do so.
-- Log communication in a replayable and auditable form.
-- Replay selected communication for testing, troubleshooting, and regression scenarios.
-- Simulate failure modes safely.
+- Log communication in an auditable form.
+- Report observed device behavior clearly enough to support reverse engineering and field diagnosis.
+- Trigger external integrations from observed state changes where explicitly configured.
 - Cache responses where the protocol and use case allow it.
 - Queue write operations where the risk is understood and visible.
 - Bridge protocols through explicit mappings rather than hidden magic.
@@ -101,11 +103,10 @@ MITMI should eventually support:
 - Passive observation.
 - Active interception.
 - Structured traffic logging.
-- Replay workflows.
-- Fault simulation.
 - Response caching.
 - Write queuing.
 - Protocol bridging.
+- Webhook-triggered integrations based on observed state changes.
 - Metrics collection.
 - Plugin-based protocol expansion.
 - JSON-based configuration.
@@ -132,7 +133,7 @@ v0.1 should be intentionally narrow:
 - Console and file logging with independent `Debug`, `Info`, `Warning`, and `Error` thresholds.
 - Basic capture file format.
 - Capture enabled by default with visible output path and retention warning.
-- Basic replay from recorded Modbus TCP transactions, treated as a secondary validation feature.
+- Modbus analyzer summaries and device-discovery reports for reverse engineering undocumented devices.
 - Basic metrics exposed through logs or a local metrics sink.
 - Clear diagnostics for startup, configuration, connection, and protocol errors.
 - Internal dependency injection.
@@ -144,6 +145,8 @@ Recommended exclusions from v0.1:
 - Dynamic third-party plugin loading.
 - Web dashboard.
 - Licensing enforcement beyond a placeholder entitlement boundary.
+- Replay.
+- Fault simulation.
 - Cross-protocol bridging.
 - Scripting engine.
 - Complex write queuing.
@@ -466,7 +469,7 @@ Candidate features:
 - Passive observe/pass-through mode.
 - Structured logging.
 - Basic capture store.
-- Basic replay for selected captured Modbus TCP exchanges as a secondary feature.
+- Modbus analyzer summaries and device-discovery reports.
 - Basic metrics.
 - Dependency injection.
 - Static plugin registration.
@@ -477,31 +480,30 @@ Success criteria:
 - A user can place MITMI between a Modbus TCP client and server.
 - MITMI can observe traffic without changing behavior.
 - MITMI can log request/response exchanges with timestamps and metadata.
-- MITMI can replay a simple recorded scenario in a controlled test setup.
+- MITMI can produce field-usable analyzer artifacts that reveal observed unit IDs, function codes, address ranges, and value changes.
 - The core does not contain Modbus-specific logic.
 
-### v0.2 - Policy And Fault Simulation
+### v0.2 - Modbus Discovery And Integrations
 
-Primary goal: make interception useful and controlled.
+Primary goal: make Modbus device discovery and external notification useful without changing traffic.
 
 Candidate features:
 
-- Rule-based filtering.
-- Delay injection.
-- Drop connection simulation.
-- Timeout simulation.
-- Response override for selected Modbus operations.
-- Safer replay scenario editing.
-- Better capture indexing.
+- Configurable Modbus address notation for reports.
+- Device-discovery report refinements.
+- Value-change tracking for observed registers.
+- Webhook triggers for any observed value update.
+- Webhook triggers for specific configured ranges.
+- Batched webhook payloads for multi-register updates.
 - More metrics.
 - Config profiles.
 - Early entitlement boundary for Free/Professional features.
 
 Success criteria:
 
-- A user can simulate common communication failures.
-- A user can understand exactly which rule affected a message.
-- Fault simulation does not require code changes.
+- A user can identify meaningful Modbus address ranges from a field run.
+- A user can trigger external systems from observed state changes without MITMI modifying traffic.
+- Webhook delivery failures are visible and never block forwarding.
 
 ### v0.3 - Caching And Queuing Experiments
 
@@ -658,7 +660,7 @@ Mitigation: explicitly document which abstractions are Modbus-proven and which a
 
 ### Risk: Unsafe Active Intervention
 
-Mitigation: make intercept, replay, cache, queue, and fault simulation opt-in, visible, logged, and clearly named.
+Mitigation: make intercept, cache, queue, bridging, and external integrations opt-in, visible, logged, and clearly named.
 
 ### Risk: Replay Produces False Confidence
 
@@ -740,11 +742,11 @@ Pick one concrete scenario:
 
 - Modbus TCP client connects to MITMI.
 - MITMI connects to upstream Modbus TCP server.
-- MITMI observes, logs, passes through, and can replay selected exchanges later.
+- MITMI observes, logs, passes through, captures, and reports observed Modbus behavior.
 
 Recommendation: resist adding multi-client, multi-server, bridging, and dynamic plugin loading until this works cleanly.
 
-### Step 5 - Define Capture And Replay Guarantees
+### Step 5 - Define Capture And Integration Guarantees
 
 Be explicit:
 
@@ -752,7 +754,7 @@ Be explicit:
 - What is best effort?
 - What is unsupported?
 
-Recommendation: v0.1 replay should be described as controlled test replay, not a perfect reconstruction of a live industrial network.
+Recommendation: v0.1 captures and reports should be described as diagnostic evidence, not active control. Future webhooks should be explicitly best-effort unless a stronger delivery model is designed.
 
 ### Step 6 - Define Commercial Boundaries Early
 
@@ -762,8 +764,8 @@ Potential Free limitations:
 
 - Number of concurrent sessions.
 - Capture duration.
-- Replay scenario count.
-- Advanced fault simulation.
+- Webhook endpoint count.
+- Advanced integration outputs.
 - Advanced export.
 - Advanced protocol plugins.
 
@@ -773,11 +775,11 @@ Recommendation: limit by capabilities and quotas at application boundaries, not 
 
 The recommended initial position is:
 
-MITMI v0.1 should be a .NET console-based, protocol-neutral mediation host with a statically registered Modbus TCP plugin. It should support observe/pass-through operation, structured logging, basic capture, basic replay, metrics, and strong configuration validation. The architecture should prepare for plugins, licensing, storage options, and future UI surfaces, but should not implement dynamic plugin loading, dashboards, scripting, or bridging in the first version.
+MITMI v0.1 should be a .NET console-based, protocol-neutral mediation host with a statically registered Modbus TCP plugin. It should support observe/pass-through operation, structured logging, basic capture, Modbus analyzer summaries, device-discovery reports, metrics, and strong configuration validation. The architecture should prepare for plugins, licensing, storage options, future UI surfaces, and carefully bounded integrations, but should not implement replay, fault simulation, dynamic plugin loading, dashboards, scripting, or bridging in the first version.
 
 This position is intentionally conservative. It protects the architecture from becoming a Modbus-specific tool while avoiding premature platform complexity.
 
-The accepted v0.1 product mode is diagnostic proxy first. Once the diagnostic proxy is running reliably, the next planning decision should be whether to deepen replay, add fault simulation, or start validating the plugin model with a second protocol.
+The accepted v0.1 product mode is diagnostic proxy first. Once the diagnostic proxy is running reliably, the next planning decision should be whether to deepen Modbus device discovery, add carefully bounded webhook integrations, or start validating the plugin model with a second protocol. Bridging should stay late because it is a product line rather than a small feature.
 
 Additional v0.1 architecture detail is tracked in `docs/architecture/v0.1-diagnostic-proxy-architecture.md` and `docs/decisions/ADR-0002-v0.1-diagnostic-proxy.md`.
 

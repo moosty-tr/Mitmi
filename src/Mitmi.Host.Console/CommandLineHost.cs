@@ -144,19 +144,20 @@ public static class CommandLineHost
                 await output.WriteLineAsync($"Writing capture records to {captureSink.CaptureFilePath}.");
             }
 
-            var analyzerSummarySink = CreateModbusAnalyzerSummarySink(
+            var analyzerArtifactsSink = CreateModbusAnalyzerArtifactsSink(
                 validationResult.RuntimeConfiguration!,
                 startedAt);
-            if (analyzerSummarySink is not null)
+            if (analyzerArtifactsSink is not null)
             {
-                await output.WriteLineAsync($"Writing Modbus analyzer summary to {analyzerSummarySink.SummaryFilePath}.");
+                await output.WriteLineAsync($"Writing Modbus analyzer summary to {analyzerArtifactsSink.SummaryFilePath}.");
+                await output.WriteLineAsync($"Writing Modbus discovery report to {analyzerArtifactsSink.DiscoveryReportFilePath}.");
             }
 
             var protocolTrafficObserverFactory = BuildProtocolTrafficObserverFactory(
                 validationResult.RuntimeConfiguration!,
                 eventSink,
                 captureSink,
-                analyzerSummarySink);
+                analyzerArtifactsSink);
             var sessionMetricsSink = CreateSessionMetricsSink(
                 validationResult.RuntimeConfiguration!,
                 eventSink);
@@ -237,7 +238,7 @@ public static class CommandLineHost
             startedAt);
     }
 
-    private static NdjsonModbusAnalyzerSummarySink? CreateModbusAnalyzerSummarySink(
+    private static ModbusAnalyzerArtifactsSink? CreateModbusAnalyzerArtifactsSink(
         RuntimeConfiguration configuration,
         DateTimeOffset startedAt)
     {
@@ -251,8 +252,8 @@ public static class CommandLineHost
             return null;
         }
 
-        return new NdjsonModbusAnalyzerSummarySink(
-            configuration.Capture,
+        return new ModbusAnalyzerArtifactsSink(
+            configuration,
             startedAt);
     }
 

@@ -23,7 +23,7 @@ Implemented v0.1 foundation:
 Out of scope for the current path:
 
 - Transparent interception, NAT, ARP spoofing, DNS spoofing, and passive packet capture.
-- Traffic modification, fault simulation, caching, queuing, bridging, scripting, and dashboards.
+- Replay, traffic modification, fault simulation, caching, queuing, bridging, scripting, and dashboards.
 - Multiple concurrent configured sessions.
 
 ## Requirements
@@ -77,6 +77,7 @@ Default paths are relative to the configuration file directory.
 - `logs/mitmi.log`: human-readable session, connection, protocol, analyzer, warning, and metrics events.
 - `captures/mitmi-capture-*.ndjson`: versioned traffic capture records with raw payloads when enabled, plus protocol-frame metadata when decoding is enabled.
 - `captures/summaries/mitmi-modbus-analyzer-summary-*.ndjson`: machine-readable Modbus function, unit, address range, and read/write count summary records.
+- `captures/reports/mitmi-modbus-device-discovery-*.md`: human-readable Modbus device-discovery report for field review.
 
 Useful event names to check in logs:
 

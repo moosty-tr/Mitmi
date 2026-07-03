@@ -120,9 +120,19 @@ public sealed class CommandLineHostRuntimeIntegrationTests
         Assert.Equal(1, holdingRegisterSummary["responses"]!.GetValue<int>());
         Assert.Equal(0, holdingRegisterSummary["exceptions"]!.GetValue<int>());
 
+        var discoveryReportFile = Assert.Single(Directory.GetFiles(
+            Path.Combine(tempDirectory.Path, "captures", "reports"),
+            "mitmi-modbus-device-discovery-*.md"));
+        var discoveryReport = await File.ReadAllTextAsync(discoveryReportFile);
+        Assert.Contains("# MITMI Modbus Device Discovery Report", discoveryReport);
+        Assert.Contains($"- Upstream device: 127.0.0.1:{upstreamPort}", discoveryReport);
+        Assert.Contains("| 1 | 3 | readHoldingRegisters | 0-1 | 2 | 1 | 0 | 1 | 1 | 0 |", discoveryReport);
+        Assert.Contains("Addresses are Modbus Protocol Data Unit offsets.", discoveryReport);
+
         var hostOutput = output.ToString();
         Assert.Contains("Writing capture records to", hostOutput);
         Assert.Contains("Writing Modbus analyzer summary to", hostOutput);
+        Assert.Contains("Writing Modbus discovery report to", hostOutput);
     }
 
     private static async Task<TcpClient> ConnectWithRetryAsync(
