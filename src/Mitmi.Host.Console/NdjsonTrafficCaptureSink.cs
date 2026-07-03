@@ -212,7 +212,10 @@ internal sealed class NdjsonTrafficCaptureSink : ITrafficCaptureSink, IAsyncDisp
         string Direction,
         string ProtocolId,
         int PayloadLength,
-        string? RawPayloadBase64)
+        string? RawPayloadBase64,
+        string? CorrelationId,
+        IReadOnlyDictionary<string, string>? ProtocolMetadata,
+        IReadOnlyList<CaptureWarningDocument>? DecodeWarnings)
     {
         public static CaptureRecordDocument From(TrafficCaptureRecord record)
         {
@@ -224,7 +227,10 @@ internal sealed class NdjsonTrafficCaptureSink : ITrafficCaptureSink, IAsyncDisp
                 FormatDirection(record.Direction),
                 record.ProtocolId.Value,
                 record.PayloadLength,
-                record.RawPayload is null ? null : Convert.ToBase64String(record.RawPayload));
+                record.RawPayload is null ? null : Convert.ToBase64String(record.RawPayload),
+                record.CorrelationId,
+                EmptyToNull(record.ProtocolMetadata),
+                EmptyToNull(record.DecodeWarnings?.Select(CaptureWarningDocument.From).ToArray()));
         }
 
         private static string FormatDirection(TrafficDirection direction)
@@ -235,6 +241,27 @@ internal sealed class NdjsonTrafficCaptureSink : ITrafficCaptureSink, IAsyncDisp
                 TrafficDirection.ServerToClient => "serverToClient",
                 _ => direction.ToString()
             };
+        }
+
+        private static IReadOnlyDictionary<string, string>? EmptyToNull(
+            IReadOnlyDictionary<string, string>? values)
+        {
+            return values is null || values.Count == 0 ? null : values;
+        }
+
+        private static IReadOnlyList<T>? EmptyToNull<T>(IReadOnlyList<T>? values)
+        {
+            return values is null || values.Count == 0 ? null : values;
+        }
+    }
+
+    private sealed record CaptureWarningDocument(
+        string Code,
+        string Message)
+    {
+        public static CaptureWarningDocument From(TrafficCaptureWarning warning)
+        {
+            return new CaptureWarningDocument(warning.Code, warning.Message);
         }
     }
 

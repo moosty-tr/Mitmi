@@ -82,6 +82,62 @@ public sealed class NdjsonTrafficCaptureSinkTests
         Assert.Equal("serverToClient", document["direction"]!.GetValue<string>());
         Assert.Equal(2, document["payloadLength"]!.GetValue<int>());
         Assert.False(document.ContainsKey("rawPayloadBase64"));
+        Assert.False(document.ContainsKey("correlationId"));
+        Assert.False(document.ContainsKey("protocolMetadata"));
+        Assert.False(document.ContainsKey("decodeWarnings"));
+    }
+
+    [Fact]
+    public async Task CaptureAsync_writes_protocol_context_when_record_includes_it()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        var eventSink = new RecordingSessionEventSink();
+        string captureFilePath;
+
+        await using (var captureSink = new NdjsonTrafficCaptureSink(
+            new CaptureRuntimeOptions(true, tempDirectory.Path, CaptureRetentionMode.Manual),
+            eventSink,
+            new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero),
+            capacity: 4))
+        {
+            captureFilePath = captureSink.CaptureFilePath;
+            await captureSink.CaptureAsync(
+                new TrafficCaptureRecord(
+                    DateTimeOffset.UtcNow,
+                    new SessionId("integration"),
+                    new ConnectionId(8),
+                    new ProtocolId("modbus-tcp"),
+                    TrafficDirection.ServerToClient,
+                    PayloadLength: 13,
+                    RawPayload: null,
+                    CorrelationId: "002a:01",
+                    ProtocolMetadata: new Dictionary<string, string>
+                    {
+                        ["transactionId"] = "42",
+                        ["unitId"] = "1",
+                        ["functionCode"] = "3"
+                    },
+                    DecodeWarnings:
+                    [
+                        new TrafficCaptureWarning(
+                            "response_function_mismatch",
+                            "Response function code did not match the request.")
+                    ]),
+                CancellationToken.None);
+        }
+
+        var document = JsonNode.Parse(Assert.Single(await File.ReadAllLinesAsync(captureFilePath)))!.AsObject();
+
+        Assert.Equal("002a:01", document["correlationId"]!.GetValue<string>());
+
+        var metadata = document["protocolMetadata"]!.AsObject();
+        Assert.Equal("42", metadata["transactionId"]!.GetValue<string>());
+        Assert.Equal("1", metadata["unitId"]!.GetValue<string>());
+        Assert.Equal("3", metadata["functionCode"]!.GetValue<string>());
+
+        var warning = Assert.Single(document["decodeWarnings"]!.AsArray());
+        Assert.Equal("response_function_mismatch", warning!["code"]!.GetValue<string>());
+        Assert.Equal("Response function code did not match the request.", warning["message"]!.GetValue<string>());
     }
 
     [Fact]

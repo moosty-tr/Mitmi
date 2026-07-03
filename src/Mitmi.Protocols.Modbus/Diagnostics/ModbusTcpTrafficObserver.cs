@@ -9,6 +9,7 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
     private readonly ModbusTcpFrameDecoder clientToServerDecoder = new();
     private readonly ISessionEventSink eventSink;
     private readonly ModbusTcpFrameDecoder serverToClientDecoder = new();
+    private readonly SemaphoreSlim observationLock = new(1, 1);
     private readonly ModbusTcpTransactionCorrelator transactionCorrelator = new();
 
     public ModbusTcpTrafficObserver(ISessionEventSink eventSink)
@@ -20,29 +21,19 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
         ProtocolTrafficObservation observation,
         CancellationToken cancellationToken)
     {
-        var decoder = observation.Direction == TrafficDirection.ClientToServer
-            ? clientToServerDecoder
-            : serverToClientDecoder;
-
-        var frameDirection = observation.Direction == TrafficDirection.ClientToServer
-            ? ModbusTcpFrameDirection.ClientToServer
-            : ModbusTcpFrameDirection.ServerToClient;
-
-        var decodeResult = decoder.Append(observation.Payload.Span, frameDirection);
-        foreach (var warning in decodeResult.Warnings)
+        await observationLock.WaitAsync(cancellationToken);
+        try
         {
-            await EmitWarningAsync(
-                observation,
-                warning,
-                SessionEventNames.ProtocolDecodeWarning,
-                cancellationToken);
-        }
+            var decoder = observation.Direction == TrafficDirection.ClientToServer
+                ? clientToServerDecoder
+                : serverToClientDecoder;
 
-        foreach (var frame in decodeResult.Frames)
-        {
-            await EmitFrameDecodedAsync(observation, frame, cancellationToken);
+            var frameDirection = observation.Direction == TrafficDirection.ClientToServer
+                ? ModbusTcpFrameDirection.ClientToServer
+                : ModbusTcpFrameDirection.ServerToClient;
 
-            foreach (var warning in frame.DecodeWarnings)
+            var decodeResult = decoder.Append(observation.Payload.Span, frameDirection);
+            foreach (var warning in decodeResult.Warnings)
             {
                 await EmitWarningAsync(
                     observation,
@@ -51,8 +42,26 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
                     cancellationToken);
             }
 
-            var transactionEvent = transactionCorrelator.Observe(frame);
-            await EmitTransactionEventAsync(observation, transactionEvent, cancellationToken);
+            foreach (var frame in decodeResult.Frames)
+            {
+                await EmitFrameDecodedAsync(observation, frame, cancellationToken);
+
+                foreach (var warning in frame.DecodeWarnings)
+                {
+                    await EmitWarningAsync(
+                        observation,
+                        warning,
+                        SessionEventNames.ProtocolDecodeWarning,
+                        cancellationToken);
+                }
+
+                var transactionEvent = transactionCorrelator.Observe(frame);
+                await EmitTransactionEventAsync(observation, transactionEvent, cancellationToken);
+            }
+        }
+        finally
+        {
+            observationLock.Release();
         }
     }
 

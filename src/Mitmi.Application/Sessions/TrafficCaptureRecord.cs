@@ -9,4 +9,7 @@ public sealed record TrafficCaptureRecord(
     ProtocolId ProtocolId,
     TrafficDirection Direction,
     int PayloadLength,
-    byte[]? RawPayload);
+    byte[]? RawPayload,
+    string? CorrelationId = null,
+    IReadOnlyDictionary<string, string>? ProtocolMetadata = null,
+    IReadOnlyList<TrafficCaptureWarning>? DecodeWarnings = null);
