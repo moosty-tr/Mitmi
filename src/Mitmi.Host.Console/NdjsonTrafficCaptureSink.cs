@@ -209,6 +209,7 @@ internal sealed class NdjsonTrafficCaptureSink : ITrafficCaptureSink, IAsyncDisp
         string TimestampUtc,
         string SessionId,
         long ConnectionId,
+        string Kind,
         string Direction,
         string ProtocolId,
         int PayloadLength,
@@ -224,6 +225,7 @@ internal sealed class NdjsonTrafficCaptureSink : ITrafficCaptureSink, IAsyncDisp
                 record.Timestamp.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
                 record.SessionId.Value,
                 record.ConnectionId.Value,
+                FormatKind(record.Kind),
                 FormatDirection(record.Direction),
                 record.ProtocolId.Value,
                 record.PayloadLength,
@@ -240,6 +242,16 @@ internal sealed class NdjsonTrafficCaptureSink : ITrafficCaptureSink, IAsyncDisp
                 TrafficDirection.ClientToServer => "clientToServer",
                 TrafficDirection.ServerToClient => "serverToClient",
                 _ => direction.ToString()
+            };
+        }
+
+        private static string FormatKind(TrafficCaptureRecordKind kind)
+        {
+            return kind switch
+            {
+                TrafficCaptureRecordKind.TrafficChunk => "trafficChunk",
+                TrafficCaptureRecordKind.ProtocolFrame => "protocolFrame",
+                _ => kind.ToString()
             };
         }
 

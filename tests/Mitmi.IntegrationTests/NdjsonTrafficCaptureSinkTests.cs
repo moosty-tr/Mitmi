@@ -44,6 +44,7 @@ public sealed class NdjsonTrafficCaptureSinkTests
         Assert.Equal("2026-07-02T12:01:00.0000000Z", document["timestampUtc"]!.GetValue<string>());
         Assert.Equal("integration", document["sessionId"]!.GetValue<string>());
         Assert.Equal(7, document["connectionId"]!.GetValue<int>());
+        Assert.Equal("trafficChunk", document["kind"]!.GetValue<string>());
         Assert.Equal("clientToServer", document["direction"]!.GetValue<string>());
         Assert.Equal("modbus-tcp", document["protocolId"]!.GetValue<string>());
         Assert.Equal(3, document["payloadLength"]!.GetValue<int>());
@@ -79,6 +80,7 @@ public sealed class NdjsonTrafficCaptureSinkTests
 
         var document = JsonNode.Parse(Assert.Single(await File.ReadAllLinesAsync(captureFilePath)))!.AsObject();
 
+        Assert.Equal("trafficChunk", document["kind"]!.GetValue<string>());
         Assert.Equal("serverToClient", document["direction"]!.GetValue<string>());
         Assert.Equal(2, document["payloadLength"]!.GetValue<int>());
         Assert.False(document.ContainsKey("rawPayloadBase64"));
@@ -122,12 +124,14 @@ public sealed class NdjsonTrafficCaptureSinkTests
                         new TrafficCaptureWarning(
                             "response_function_mismatch",
                             "Response function code did not match the request.")
-                    ]),
+                    ],
+                    Kind: TrafficCaptureRecordKind.ProtocolFrame),
                 CancellationToken.None);
         }
 
         var document = JsonNode.Parse(Assert.Single(await File.ReadAllLinesAsync(captureFilePath)))!.AsObject();
 
+        Assert.Equal("protocolFrame", document["kind"]!.GetValue<string>());
         Assert.Equal("002a:01", document["correlationId"]!.GetValue<string>());
 
         var metadata = document["protocolMetadata"]!.AsObject();

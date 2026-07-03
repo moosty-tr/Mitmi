@@ -134,7 +134,8 @@ public static class CommandLineHost
 
             var protocolTrafficObserverFactory = BuildProtocolTrafficObserverFactory(
                 validationResult.RuntimeConfiguration!,
-                eventSink);
+                eventSink,
+                captureSink);
             var sessionMetricsSink = CreateSessionMetricsSink(
                 validationResult.RuntimeConfiguration!,
                 eventSink);
@@ -296,7 +297,8 @@ public static class CommandLineHost
 
     private static IProtocolTrafficObserverFactory? BuildProtocolTrafficObserverFactory(
         RuntimeConfiguration configuration,
-        ISessionEventSink eventSink)
+        ISessionEventSink eventSink,
+        ITrafficCaptureSink? trafficCaptureSink)
     {
         if (!configuration.Session.Diagnostics.DecodeProtocol)
         {
@@ -309,7 +311,10 @@ public static class CommandLineHost
             StringComparison.OrdinalIgnoreCase))
         {
             return new BoundedProtocolTrafficObserverFactory(
-                new ModbusTcpTrafficObserverFactory(eventSink),
+                new ModbusTcpTrafficObserverFactory(
+                    eventSink,
+                    trafficCaptureSink,
+                    configuration.Session.Diagnostics.CaptureRawPayloads),
                 eventSink);
         }
 

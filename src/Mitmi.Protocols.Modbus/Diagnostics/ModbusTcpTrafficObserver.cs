@@ -1,3 +1,4 @@
+using System.Globalization;
 using Mitmi.Application.Sessions;
 using Mitmi.Domain;
 using Mitmi.Protocols.Modbus.Framing;
@@ -11,10 +12,17 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
     private readonly ModbusTcpFrameDecoder serverToClientDecoder = new();
     private readonly SemaphoreSlim observationLock = new(1, 1);
     private readonly ModbusTcpTransactionCorrelator transactionCorrelator = new();
+    private readonly bool captureRawPayloads;
+    private readonly ITrafficCaptureSink? trafficCaptureSink;
 
-    public ModbusTcpTrafficObserver(ISessionEventSink eventSink)
+    public ModbusTcpTrafficObserver(
+        ISessionEventSink eventSink,
+        ITrafficCaptureSink? trafficCaptureSink = null,
+        bool captureRawPayloads = false)
     {
         this.eventSink = eventSink;
+        this.trafficCaptureSink = trafficCaptureSink;
+        this.captureRawPayloads = captureRawPayloads;
     }
 
     public async ValueTask ObserveAsync(
@@ -57,11 +65,57 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
 
                 var transactionEvent = transactionCorrelator.Observe(frame);
                 await EmitTransactionEventAsync(observation, transactionEvent, cancellationToken);
+                await CaptureFrameAsync(observation, frame, transactionEvent, cancellationToken);
             }
         }
         finally
         {
             observationLock.Release();
+        }
+    }
+
+    private async ValueTask CaptureFrameAsync(
+        ProtocolTrafficObservation observation,
+        ModbusTcpFrame frame,
+        ModbusTcpTransactionEvent transactionEvent,
+        CancellationToken cancellationToken)
+    {
+        if (trafficCaptureSink is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await trafficCaptureSink.CaptureAsync(
+                new TrafficCaptureRecord(
+                    DateTimeOffset.UtcNow,
+                    observation.SessionId,
+                    observation.ConnectionId,
+                    new ProtocolId(ModbusTcpProtocolPlugin.ProtocolId),
+                    observation.Direction,
+                    frame.RawFrame.Length,
+                    captureRawPayloads ? frame.RawFrame : null,
+                    transactionEvent.CorrelationId,
+                    BuildProtocolMetadata(frame, transactionEvent),
+                    BuildDecodeWarnings(frame, transactionEvent),
+                    TrafficCaptureRecordKind.ProtocolFrame),
+                cancellationToken);
+        }
+        catch (Exception exception) when (
+            exception is not OperationCanceledException ||
+            !cancellationToken.IsCancellationRequested)
+        {
+            await eventSink.EmitAsync(
+                new SessionEvent(
+                    DateTimeOffset.UtcNow,
+                    SessionEventLevel.Warning,
+                    SessionEventNames.CaptureSinkFailed,
+                    observation.SessionId,
+                    observation.ConnectionId,
+                    $"Capture failed while recording decoded Modbus frame: {exception.Message}",
+                    exception),
+                cancellationToken);
         }
     }
 
@@ -158,5 +212,53 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
         return frame.IsExceptionResponse
             ? $"{frame.OperationFunctionCode} exceptionCode={frame.ExceptionCode}"
             : frame.FunctionCode.ToString();
+    }
+
+    private static IReadOnlyDictionary<string, string> BuildProtocolMetadata(
+        ModbusTcpFrame frame,
+        ModbusTcpTransactionEvent transactionEvent)
+    {
+        var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["transactionId"] = frame.TransactionId.ToString(CultureInfo.InvariantCulture),
+            ["mbapProtocolId"] = frame.ProtocolId.ToString(CultureInfo.InvariantCulture),
+            ["length"] = frame.Length.ToString(CultureInfo.InvariantCulture),
+            ["unitId"] = frame.UnitId.ToString(CultureInfo.InvariantCulture),
+            ["functionCode"] = frame.FunctionCode.ToString(CultureInfo.InvariantCulture),
+            ["operationFunctionCode"] = frame.OperationFunctionCode.ToString(CultureInfo.InvariantCulture),
+            ["isExceptionResponse"] = frame.IsExceptionResponse ? "true" : "false",
+            ["transactionEventKind"] = FormatTransactionEventKind(transactionEvent.Kind)
+        };
+
+        if (frame.ExceptionCode is { } exceptionCode)
+        {
+            metadata["exceptionCode"] = exceptionCode.ToString(CultureInfo.InvariantCulture);
+        }
+
+        return metadata;
+    }
+
+    private static IReadOnlyList<TrafficCaptureWarning>? BuildDecodeWarnings(
+        ModbusTcpFrame frame,
+        ModbusTcpTransactionEvent transactionEvent)
+    {
+        var warnings = frame.DecodeWarnings
+            .Concat(transactionEvent.Warnings)
+            .Select(warning => new TrafficCaptureWarning(warning.Code, warning.Message))
+            .ToArray();
+
+        return warnings.Length == 0 ? null : warnings;
+    }
+
+    private static string FormatTransactionEventKind(ModbusTcpTransactionEventKind kind)
+    {
+        return kind switch
+        {
+            ModbusTcpTransactionEventKind.RequestObserved => "requestObserved",
+            ModbusTcpTransactionEventKind.ResponseAwaitingRequest => "responseAwaitingRequest",
+            ModbusTcpTransactionEventKind.ResponseMatched => "responseMatched",
+            ModbusTcpTransactionEventKind.ResponseWithoutRequest => "responseWithoutRequest",
+            _ => kind.ToString()
+        };
     }
 }

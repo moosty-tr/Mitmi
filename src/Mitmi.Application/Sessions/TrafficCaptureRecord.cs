@@ -12,4 +12,5 @@ public sealed record TrafficCaptureRecord(
     byte[]? RawPayload,
     string? CorrelationId = null,
     IReadOnlyDictionary<string, string>? ProtocolMetadata = null,
-    IReadOnlyList<TrafficCaptureWarning>? DecodeWarnings = null);
+    IReadOnlyList<TrafficCaptureWarning>? DecodeWarnings = null,
+    TrafficCaptureRecordKind Kind = TrafficCaptureRecordKind.TrafficChunk);

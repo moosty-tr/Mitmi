@@ -69,10 +69,20 @@ public sealed class CommandLineHostRuntimeIntegrationTests
         var captureDocuments = captureLines.Select(line => JsonNode.Parse(line)!.AsObject()).ToArray();
         Assert.Contains(captureDocuments, document => document["direction"]!.GetValue<string>() == "clientToServer");
         Assert.Contains(captureDocuments, document => document["direction"]!.GetValue<string>() == "serverToClient");
+        Assert.Contains(captureDocuments, document => document["kind"]!.GetValue<string>() == "trafficChunk");
+        var protocolFrame = captureDocuments.FirstOrDefault(document =>
+            document["kind"]!.GetValue<string>() == "protocolFrame" &&
+            document["direction"]!.GetValue<string>() == "serverToClient");
+        Assert.NotNull(protocolFrame);
+        Assert.False(string.IsNullOrWhiteSpace(protocolFrame!["correlationId"]!.GetValue<string>()));
+        var protocolMetadata = protocolFrame["protocolMetadata"]!.AsObject();
+        Assert.Equal("3", protocolMetadata["functionCode"]!.GetValue<string>());
+        Assert.Equal("responseMatched", protocolMetadata["transactionEventKind"]!.GetValue<string>());
         Assert.All(captureDocuments, document =>
         {
             Assert.Equal(1, document["captureFormatVersion"]!.GetValue<int>());
             Assert.Equal("modbus-tcp", document["protocolId"]!.GetValue<string>());
+            Assert.False(string.IsNullOrWhiteSpace(document["kind"]!.GetValue<string>()));
             Assert.True(document["payloadLength"]!.GetValue<int>() > 0);
             Assert.True(document.ContainsKey("rawPayloadBase64"));
         });
