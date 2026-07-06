@@ -99,6 +99,17 @@ public static class CommandLineHost
             return ExitCodes.ConfigurationInvalid;
         }
 
+        var integrationIssues = new List<ConfigurationIssue>();
+        var observedValueWebhookOptions = ObservedValueWebhookOptions.FromIntegrations(
+            configurationDocument.Integrations,
+            validationResult.RuntimeConfiguration!,
+            integrationIssues);
+        if (integrationIssues.Any(issue => issue.Severity == ConfigurationIssueSeverity.Error))
+        {
+            RenderIssues(error, integrationIssues);
+            return ExitCodes.ConfigurationInvalid;
+        }
+
         var protocolOptionIssues = new List<ConfigurationIssue>();
         var modbusReportAddressOptions = ModbusReportAddressOptions.FromProtocolOptions(
             configurationDocument.Session!.ProtocolOptions,
@@ -109,7 +120,11 @@ public static class CommandLineHost
             return ExitCodes.ConfigurationInvalid;
         }
 
-        RenderStartupDiagnostics(output, validationResult.RuntimeConfiguration!, validationResult.Warnings);
+        RenderStartupDiagnostics(
+            output,
+            validationResult.RuntimeConfiguration!,
+            validationResult.Warnings.Concat(integrationIssues).ToArray(),
+            observedValueWebhookOptions);
 
         if (options.ValidateConfig)
         {
@@ -169,7 +184,8 @@ public static class CommandLineHost
                 validationResult.RuntimeConfiguration!,
                 eventSink,
                 captureSink,
-                analyzerArtifactsSink);
+                analyzerArtifactsSink,
+                observedValueWebhookOptions);
             var sessionMetricsSink = CreateSessionMetricsSink(
                 validationResult.RuntimeConfiguration!,
                 eventSink);
@@ -377,7 +393,8 @@ public static class CommandLineHost
         RuntimeConfiguration configuration,
         ISessionEventSink eventSink,
         ITrafficCaptureSink? trafficCaptureSink,
-        IModbusTcpAnalyzerSummarySink? analyzerSummarySink)
+        IModbusTcpAnalyzerSummarySink? analyzerSummarySink,
+        ObservedValueWebhookOptions observedValueWebhookOptions)
     {
         if (!configuration.Session.Diagnostics.DecodeProtocol)
         {
@@ -394,17 +411,29 @@ public static class CommandLineHost
                     eventSink,
                     trafficCaptureSink,
                     configuration.Session.Diagnostics.CaptureRawPayloads,
-                    analyzerSummarySink),
+                    analyzerSummarySink,
+                    configuration.Session.UpstreamEndpoint,
+                    CreateObservedValueWebhookSink(observedValueWebhookOptions, eventSink)),
                 eventSink);
         }
 
         return null;
     }
 
+    private static IModbusObservedValueUpdateSink? CreateObservedValueWebhookSink(
+        ObservedValueWebhookOptions options,
+        ISessionEventSink eventSink)
+    {
+        return options.Enabled
+            ? new ModbusObservedValueWebhookSink(options, eventSink)
+            : null;
+    }
+
     private static void RenderStartupDiagnostics(
         TextWriter output,
         RuntimeConfiguration configuration,
-        IReadOnlyList<ConfigurationIssue> warnings)
+        IReadOnlyList<ConfigurationIssue> warnings,
+        ObservedValueWebhookOptions observedValueWebhookOptions)
     {
         output.WriteLine("MITMI v0.1 diagnostic proxy configuration");
         output.WriteLine($"  Configuration: {configuration.ConfigurationFilePath}");
@@ -418,6 +447,12 @@ public static class CommandLineHost
         output.WriteLine($"  Capture: {(configuration.Capture.Enabled ? "enabled" : "disabled")}");
         output.WriteLine($"  Capture path: {configuration.Capture.OutputPath}");
         output.WriteLine($"  Metrics: {(configuration.Metrics.Enabled ? configuration.Metrics.Sink : "disabled")}");
+        output.WriteLine($"  Observed-value webhook: {(observedValueWebhookOptions.Enabled ? "enabled" : "disabled")}");
+        if (observedValueWebhookOptions.Enabled)
+        {
+            output.WriteLine($"  Observed-value webhook URL: {observedValueWebhookOptions.Url}");
+        }
+
         output.WriteLine("  Client retargeting: configure clients to connect to MITMI's listen endpoint.");
 
         if (warnings.Count == 0)

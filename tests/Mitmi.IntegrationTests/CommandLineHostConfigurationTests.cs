@@ -288,9 +288,62 @@ public sealed class CommandLineHostConfigurationTests
         Assert.Contains("zeroBasedPdu", error.ToString());
     }
 
+    [Fact]
+    public async Task RunAsync_rejects_observed_value_webhook_when_protocol_decoding_is_disabled()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var configPath = Path.Combine(tempDirectory.Path, "mitmi.config.json");
+        await File.WriteAllTextAsync(
+            configPath,
+            ValidConfigurationJson(
+                "webhook-no-decode",
+                topLevelTailJson: ObservedValueWebhookIntegrationJson(),
+                decodeProtocol: false));
+
+        var exitCode = await CommandLineHost.RunAsync(
+            ["--config", configPath, "--validate-config"],
+            output,
+            error,
+            applicationDirectory: tempDirectory.Path);
+
+        Assert.NotEqual(0, exitCode);
+        Assert.Empty(output.ToString());
+        Assert.Contains("INVALID_INTEGRATION_OPTIONS", error.ToString());
+        Assert.Contains("decodeProtocol", error.ToString());
+    }
+
+    [Fact]
+    public async Task RunAsync_rejects_unsupported_observed_value_webhook_authentication()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var configPath = Path.Combine(tempDirectory.Path, "mitmi.config.json");
+        await File.WriteAllTextAsync(
+            configPath,
+            ValidConfigurationJson(
+                "webhook-auth",
+                topLevelTailJson: ObservedValueWebhookIntegrationJson(authenticationMode: "HeaderFromEnvironment")));
+
+        var exitCode = await CommandLineHost.RunAsync(
+            ["--config", configPath, "--validate-config"],
+            output,
+            error,
+            applicationDirectory: tempDirectory.Path);
+
+        Assert.NotEqual(0, exitCode);
+        Assert.Empty(output.ToString());
+        Assert.Contains("INVALID_INTEGRATION_OPTIONS", error.ToString());
+        Assert.Contains("None", error.ToString());
+    }
+
     private static string ValidConfigurationJson(
         string sessionId,
-        string sessionTailJson = "") =>
+        string sessionTailJson = "",
+        string topLevelTailJson = "",
+        bool decodeProtocol = true) =>
         $$"""
           {
             "configurationVersion": 1,
@@ -316,6 +369,7 @@ public sealed class CommandLineHostConfigurationTests
               "enabled": true,
               "sink": "Log"
             },
+            {{topLevelTailJson}}
             "session": {
               "id": "{{sessionId}}",
               "protocol": "modbus-tcp",
@@ -328,13 +382,42 @@ public sealed class CommandLineHostConfigurationTests
                 "port": 502
               },
               "diagnostics": {
-                "decodeProtocol": true,
+                "decodeProtocol": {{decodeProtocol.ToString().ToLowerInvariant()}},
                 "captureRawPayloads": true
               }
               {{sessionTailJson}}
             }
           }
           """;
+
+    private static string ObservedValueWebhookIntegrationJson(
+        string authenticationMode = "None") =>
+        $$"""
+            "integrations": {
+              "observedValueWebhook": {
+                "enabled": true,
+                "url": "https://example.invalid/mitmi/observed-values",
+                "trigger": {
+                  "mode": "ChangedCellsOnly",
+                  "ranges": [
+                    {
+                      "unitId": 1,
+                      "table": "holdingRegisters",
+                      "startAddress": 0,
+                      "endAddress": 99
+                    }
+                  ]
+                },
+                "delivery": {
+                  "timeoutMilliseconds": 2000,
+                  "queueCapacity": 256
+                },
+                "authentication": {
+                  "mode": "{{authenticationMode}}"
+                }
+              }
+            },
+        """;
 
     private static string FindRepositoryRoot()
     {

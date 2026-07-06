@@ -10,6 +10,9 @@ public static class SessionEventNames
     public const string DiagnosticsEventDropped = "diagnostics.event_dropped";
     public const string DiagnosticsEventLossSummary = "diagnostics.event_loss_summary";
     public const string ForwardingStarted = "forwarding.started";
+    public const string IntegrationObservedValueWebhookDeliveryFailed = "integration.observed_value_webhook.delivery_failed";
+    public const string IntegrationObservedValueWebhookDropped = "integration.observed_value_webhook.dropped";
+    public const string IntegrationObservedValueWebhookSummary = "integration.observed_value_webhook.summary";
     public const string ListenerBindFailed = "listener.bind_failed";
     public const string ListenerStarted = "listener.started";
     public const string ListenerStopped = "listener.stopped";

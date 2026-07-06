@@ -18,6 +18,7 @@ Run it again after changes that affect:
 - Startup diagnostics and operator workflow.
 - Configuration path resolution.
 - Shutdown behavior.
+- Observed-value webhook delivery behavior.
 
 ## Safety Boundary
 
@@ -56,6 +57,7 @@ Before starting MITMI:
 - `session.protocolOptions["modbus-tcp"].reportAddressColumns` includes `zeroBasedPdu`; add `oneBased` or `reference` when those columns help compare with device manuals.
 - `capture.enabled` is `true`.
 - `logging.file.enabled` is `true`.
+- If validating webhooks, `integrations.observedValueWebhook.enabled` is `true`, the URL points to an approved test receiver, and filters use zero-based PDU ranges.
 
 Run configuration validation before connecting the real client:
 
@@ -92,6 +94,7 @@ mitmi --config path\to\mitmi.config.json --validate-config
 - Discovery report exists under `captures/reports` and summarizes observed Modbus functions and configured address columns in a human-readable table. The zero-based PDU address range must remain present.
 - Shutdown emits normal listener/session stop events.
 - No capture, diagnostics, or session event loss warnings appear during the short run.
+- If validating webhooks, the receiver gets the expected changed-value payloads and the MITMI log contains `integration.observed_value_webhook.summary` with no failed or dropped deliveries.
 
 ## Fail Criteria
 
@@ -104,6 +107,7 @@ mitmi --config path\to\mitmi.config.json --validate-config
 - Analyzer summary is missing after a run that produced decoded Modbus transactions.
 - Discovery report is missing after a run that produced decoded Modbus transactions.
 - Operator cannot identify the active log and capture paths from startup output.
+- Enabled webhook delivery reports repeated failures or drops during the validation run.
 
 ## Evidence To Keep
 
@@ -118,6 +122,7 @@ mitmi --config path\to\mitmi.config.json --validate-config
 - Modbus analyzer summary NDJSON file.
 - Modbus device discovery Markdown report.
 - Diagnostics bundle zip, if exported.
+- Webhook receiver logs, if webhook behavior is part of the validation.
 - Any firewall or interface binding changes made for the test.
 
 ## Physical-Test Decision

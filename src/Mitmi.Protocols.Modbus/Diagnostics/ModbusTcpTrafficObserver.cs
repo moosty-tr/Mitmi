@@ -15,17 +15,26 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
     private readonly bool captureRawPayloads;
     private readonly ITrafficCaptureSink? trafficCaptureSink;
     private readonly ModbusTcpAnalyzerSessionSummary? analyzerSessionSummary;
+    private readonly NetworkEndpoint? upstreamEndpoint;
+    private readonly ModbusObservedValueState? observedValueState;
+    private readonly IModbusObservedValueUpdateSink? observedValueSink;
 
     public ModbusTcpTrafficObserver(
         ISessionEventSink eventSink,
         ITrafficCaptureSink? trafficCaptureSink = null,
         bool captureRawPayloads = false,
-        ModbusTcpAnalyzerSessionSummary? analyzerSessionSummary = null)
+        ModbusTcpAnalyzerSessionSummary? analyzerSessionSummary = null,
+        NetworkEndpoint? upstreamEndpoint = null,
+        ModbusObservedValueState? observedValueState = null,
+        IModbusObservedValueUpdateSink? observedValueSink = null)
     {
         this.eventSink = eventSink;
         this.trafficCaptureSink = trafficCaptureSink;
         this.captureRawPayloads = captureRawPayloads;
         this.analyzerSessionSummary = analyzerSessionSummary;
+        this.upstreamEndpoint = upstreamEndpoint;
+        this.observedValueState = observedValueState;
+        this.observedValueSink = observedValueSink;
     }
 
     public async ValueTask ObserveAsync(
@@ -78,6 +87,10 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
                     transactionEvent,
                     transactionAnalysis,
                     cancellationToken);
+                await EmitObservedValueUpdateAsync(
+                    observation,
+                    transactionEvent,
+                    cancellationToken);
                 await CaptureFrameAsync(
                     observation,
                     frame,
@@ -89,6 +102,50 @@ public sealed class ModbusTcpTrafficObserver : IProtocolTrafficObserver
         finally
         {
             observationLock.Release();
+        }
+    }
+
+    private async ValueTask EmitObservedValueUpdateAsync(
+        ProtocolTrafficObservation observation,
+        ModbusTcpTransactionEvent transactionEvent,
+        CancellationToken cancellationToken)
+    {
+        if (observedValueState is null ||
+            observedValueSink is null ||
+            upstreamEndpoint is null)
+        {
+            return;
+        }
+
+        var updateGroup = observedValueState.ObserveMatchedTransaction(
+            observation.SessionId,
+            upstreamEndpoint,
+            transactionEvent,
+            DateTimeOffset.UtcNow);
+
+        if (updateGroup is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await observedValueSink.EmitAsync(updateGroup, cancellationToken);
+        }
+        catch (Exception exception) when (
+            exception is not OperationCanceledException ||
+            !cancellationToken.IsCancellationRequested)
+        {
+            await eventSink.EmitAsync(
+                new SessionEvent(
+                    DateTimeOffset.UtcNow,
+                    SessionEventLevel.Warning,
+                    SessionEventNames.ProtocolObserverFailed,
+                    observation.SessionId,
+                    observation.ConnectionId,
+                    $"Observed-value update delivery failed while processing Modbus diagnostics: {exception.Message}",
+                    exception),
+                cancellationToken);
         }
     }
 

@@ -53,6 +53,11 @@ public sealed class TcpDiagnosticSessionRunner
                 $"Failed to bind listener at {session.ListenEndpoint}: {exception.Message}",
                 exception,
                 cancellationToken);
+            await DisposeProtocolTrafficObserverFactoryAsync(
+                trafficObserverFactory,
+                eventSink,
+                session.Id,
+                CancellationToken.None);
             throw;
         }
 

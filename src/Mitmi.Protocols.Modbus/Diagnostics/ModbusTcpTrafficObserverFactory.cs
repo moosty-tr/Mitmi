@@ -9,6 +9,9 @@ public sealed class ModbusTcpTrafficObserverFactory : IProtocolTrafficObserverFa
     private readonly bool captureRawPayloads;
     private readonly ITrafficCaptureSink? trafficCaptureSink;
     private readonly IModbusTcpAnalyzerSummarySink? analyzerSummarySink;
+    private readonly NetworkEndpoint? upstreamEndpoint;
+    private readonly IModbusObservedValueUpdateSink? observedValueSink;
+    private readonly ModbusObservedValueState? observedValueState;
     private readonly ModbusTcpAnalyzerSessionSummary analyzerSessionSummary = new();
     private SessionId? sessionId;
     private int disposed;
@@ -17,12 +20,22 @@ public sealed class ModbusTcpTrafficObserverFactory : IProtocolTrafficObserverFa
         ISessionEventSink eventSink,
         ITrafficCaptureSink? trafficCaptureSink = null,
         bool captureRawPayloads = false,
-        IModbusTcpAnalyzerSummarySink? analyzerSummarySink = null)
+        IModbusTcpAnalyzerSummarySink? analyzerSummarySink = null,
+        NetworkEndpoint? upstreamEndpoint = null,
+        IModbusObservedValueUpdateSink? observedValueSink = null)
     {
         this.eventSink = eventSink;
         this.trafficCaptureSink = trafficCaptureSink;
         this.captureRawPayloads = captureRawPayloads;
         this.analyzerSummarySink = analyzerSummarySink;
+        this.upstreamEndpoint = upstreamEndpoint;
+        this.observedValueSink = observedValueSink;
+        observedValueState = observedValueSink is null ? null : new ModbusObservedValueState();
+
+        if (observedValueSink is not null)
+        {
+            ArgumentNullException.ThrowIfNull(upstreamEndpoint);
+        }
     }
 
     public IProtocolTrafficObserver Create(SessionId sessionId, ConnectionId connectionId)
@@ -32,26 +45,37 @@ public sealed class ModbusTcpTrafficObserverFactory : IProtocolTrafficObserverFa
             eventSink,
             trafficCaptureSink,
             captureRawPayloads,
-            analyzerSessionSummary);
+            analyzerSessionSummary,
+            upstreamEndpoint,
+            observedValueState,
+            observedValueSink);
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref disposed, 1) != 0 || sessionId is null)
+        if (Interlocked.Exchange(ref disposed, 1) != 0)
         {
             return;
         }
 
-        var timestamp = DateTimeOffset.UtcNow;
-        var summaryRecords = analyzerSessionSummary.CreateRecords(sessionId.Value, timestamp);
-        foreach (var summaryEvent in analyzerSessionSummary.CreateEvents(summaryRecords))
+        if (sessionId is { } activeSessionId)
         {
-            await eventSink.EmitAsync(summaryEvent, CancellationToken.None);
+            var timestamp = DateTimeOffset.UtcNow;
+            var summaryRecords = analyzerSessionSummary.CreateRecords(activeSessionId, timestamp);
+            foreach (var summaryEvent in analyzerSessionSummary.CreateEvents(summaryRecords))
+            {
+                await eventSink.EmitAsync(summaryEvent, CancellationToken.None);
+            }
+
+            if (analyzerSummarySink is not null)
+            {
+                await analyzerSummarySink.EmitAsync(summaryRecords, CancellationToken.None);
+            }
         }
 
-        if (analyzerSummarySink is not null)
+        if (observedValueSink is IAsyncDisposable asyncDisposableSink)
         {
-            await analyzerSummarySink.EmitAsync(summaryRecords, CancellationToken.None);
+            await asyncDisposableSink.DisposeAsync();
         }
     }
 }

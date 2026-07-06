@@ -12,6 +12,9 @@ obj/
 /mitmi.config.json
 /logs/
 /captures/
+**/mitmi.config.json
+**/logs/
+**/captures/
 
 # OS noise
 Thumbs.db

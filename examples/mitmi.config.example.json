@@ -22,6 +22,30 @@
     "enabled": true,
     "sink": "Log"
   },
+  "integrations": {
+    "observedValueWebhook": {
+      "enabled": false,
+      "url": "https://example.invalid/mitmi/observed-values",
+      "trigger": {
+        "mode": "ChangedCellsOnly",
+        "ranges": [
+          {
+            "unitId": 1,
+            "table": "holdingRegisters",
+            "startAddress": 0,
+            "endAddress": 99
+          }
+        ]
+      },
+      "delivery": {
+        "timeoutMilliseconds": 2000,
+        "queueCapacity": 256
+      },
+      "authentication": {
+        "mode": "None"
+      }
+    }
+  },
   "session": {
     "id": "default",
     "protocol": "modbus-tcp",

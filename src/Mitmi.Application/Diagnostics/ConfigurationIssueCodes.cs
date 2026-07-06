@@ -10,6 +10,7 @@ public static class ConfigurationIssueCodes
     public const string EmptySessionId = "EMPTY_SESSION_ID";
     public const string FileLoggingPathMissing = "FILE_LOGGING_PATH_MISSING";
     public const string IdenticalListenAndUpstreamEndpoints = "IDENTICAL_LISTEN_AND_UPSTREAM_ENDPOINTS";
+    public const string InvalidIntegrationOptions = "INVALID_INTEGRATION_OPTIONS";
     public const string InvalidJson = "INVALID_JSON";
     public const string InvalidListenEndpoint = "INVALID_LISTEN_ENDPOINT";
     public const string InvalidLoggingLevel = "INVALID_LOGGING_LEVEL";
@@ -26,5 +27,6 @@ public static class ConfigurationIssueCodes
     public const string UnknownCaptureRetentionMode = "UNKNOWN_CAPTURE_RETENTION_MODE";
     public const string UnknownMetricsSink = "UNKNOWN_METRICS_SINK";
     public const string UnknownProtocol = "UNKNOWN_PROTOCOL";
+    public const string ObservedValueWebhookEnabled = "OBSERVED_VALUE_WEBHOOK_ENABLED";
     public const string UnsupportedConfigurationVersion = "UNSUPPORTED_CONFIGURATION_VERSION";
 }

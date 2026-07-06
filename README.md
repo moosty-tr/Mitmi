@@ -19,12 +19,14 @@ Implemented v0.1 foundation:
 - Session-level Modbus analyzer summary logs and NDJSON summary artifacts.
 - Basic session and connection metrics emitted through logs.
 - Diagnostics bundle export for field-support handoff.
+- Disabled-by-default observed-value webhook delivery for changed Modbus cells.
 
 Out of scope for the current path:
 
 - Transparent interception, NAT, ARP spoofing, DNS spoofing, and passive packet capture.
 - Replay, traffic modification, fault simulation, caching, queuing, bridging, scripting, and dashboards.
 - Multiple concurrent configured sessions.
+- Multiple webhook targets, retries, durable delivery, and webhook authentication beyond `None`.
 
 ## Requirements
 
@@ -62,6 +64,7 @@ Edit the generated file:
 - `logging.file.path` is the file log path.
 - `capture.outputPath` is where capture and analyzer summary artifacts are written.
 - `session.protocolOptions["modbus-tcp"].reportAddressColumns` controls the address columns in discovery reports.
+- `integrations.observedValueWebhook` controls optional changed-value webhook delivery. It is disabled by default.
 
 Validate configuration before starting the proxy:
 
@@ -96,6 +99,11 @@ Useful event names to check in logs:
 - `protocol.transaction_matched`
 - `protocol.analyzer_summary`
 - `metrics.session_summary`
+- `integration.observed_value_webhook.delivery_failed`
+- `integration.observed_value_webhook.dropped`
+- `integration.observed_value_webhook.summary`
+
+Observed-value webhooks, when enabled, post one JSON document per matched Modbus update group after `ChangedCellsOnly` filtering. Filters use unit ID, Modbus table, and zero-based PDU address ranges. Delivery is best-effort with one attempt, a bounded queue, and a short timeout; it never modifies traffic or waits in the forwarding path.
 
 Export a support bundle after a run:
 
