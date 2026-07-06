@@ -11,9 +11,9 @@ The operator reported that all pass criteria from `docs/validation/modbus-tcp-ph
 ## Execution Context
 
 - Test target: Teletek fire alarm panel.
-- Test folder: `C:\Users\ND49\nanodems.com\Documents\Mitmi\src\Mitmi.Host.Console\bin\Debug\net10.0`
+- Test folder: local MITMI console-host debug output directory.
 - Validation runbook: `docs/validation/modbus-tcp-physical-validation.md`
-- Reported by: ND49.
+- Reported by: operator.
 
 ## Evidence Status
 
