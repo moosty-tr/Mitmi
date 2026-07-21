@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MITMI Tools</title>
+    <meta
+      name="description"
+      content="MITMI Tools: focused Modbus TCP diagnostics, read-only address scanning, and CSV access for Excel, Power BI, browsers, and scripts.">
+    <link rel="stylesheet" href="assets/mitmi-tools.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="MITMI Tools home">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <span>MITMI Tools</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary navigation">
+        <a href="#tools">Tools</a>
+        <a href="#downloads">Downloads</a>
+        <a href="#validation">Validation</a>
+        <a href="https://github.com/moosty-tr/Mitmi">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero-section">
+        <div class="hero-copy">
+          <p class="eyebrow">Modbus TCP diagnostics without a platform-shaped tax</p>
+          <h1>MITMI Tools</h1>
+          <p class="lead">
+            A small family of field-usable utilities for observing Modbus TCP traffic,
+            discovering readable addresses, and exposing live values as plain CSV.
+          </p>
+          <div class="hero-actions" aria-label="Primary actions">
+            <a class="button primary" href="#downloads">Download v0.1.0</a>
+            <a class="button secondary" href="#chooser">Choose a tool</a>
+          </div>
+        </div>
+
+        <div class="signal-panel" aria-label="MITMI tool flow preview">
+          <div class="signal-header">
+            <span>Field workflow</span>
+            <span>v0.1.0</span>
+          </div>
+          <div class="signal-path">
+            <div class="signal-node">
+              <span class="node-label">Observe</span>
+              <strong>MITMI</strong>
+              <small>Proxy, capture, report</small>
+            </div>
+            <div class="signal-line" aria-hidden="true"></div>
+            <div class="signal-node">
+              <span class="node-label">Discover</span>
+              <strong>mitmi-scan</strong>
+              <small>Read-only address map</small>
+            </div>
+            <div class="signal-line" aria-hidden="true"></div>
+            <div class="signal-node">
+              <span class="node-label">Export</span>
+              <strong>mitmi-csv</strong>
+              <small>HTTP to CSV</small>
+            </div>
+          </div>
+          <div class="terminal-preview" aria-label="Release asset preview">
+            <div><span class="prompt">&gt;</span> mitmi --validate-config</div>
+            <div class="terminal-ok">Configuration valid.</div>
+            <div><span class="prompt">&gt;</span> mitmi-scan scan --table all --format markdown</div>
+            <div class="terminal-ok">Readable ranges found.</div>
+            <div><span class="prompt">&gt;</span> curl /read?...&amp;fc=3&amp;count=10</div>
+            <div class="terminal-ok">text/csv; charset=utf-8</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="chooser" class="chooser-section">
+        <div class="section-heading">
+          <p class="eyebrow">Tool chooser</p>
+          <h2>Start with the job, not the product name.</h2>
+        </div>
+        <div class="chooser-grid">
+          <a class="chooser-item" href="#mitmi">
+            <span>I need to observe traffic already happening</span>
+            <strong>Use MITMI</strong>
+          </a>
+          <a class="chooser-item" href="#mitmi-scan">
+            <span>I need to discover readable addresses</span>
+            <strong>Use mitmi-scan</strong>
+          </a>
+          <a class="chooser-item" href="#mitmi-csv">
+            <span>I need live values in Excel, Power BI, or a script</span>
+            <strong>Use mitmi-csv</strong>
+          </a>
+        </div>
+      </section>
+
+      <section id="tools" class="tools-section">
+        <div class="section-heading">
+          <p class="eyebrow">Three small tools</p>
+          <h2>Focused utilities with explicit boundaries.</h2>
+        </div>
+
+        <div class="tool-grid">
+          <article id="mitmi" class="tool-card">
+            <div class="tool-topline">
+              <span class="tool-chip">Diagnostic proxy</span>
+              <span class="status ready">Field evidence</span>
+            </div>
+            <h3>MITMI</h3>
+            <p>
+              An in-path Modbus TCP diagnostic proxy. Clients connect to MITMI,
+              MITMI connects upstream, and traffic is forwarded unchanged while logs,
+              captures, analyzer summaries, and support bundles are produced.
+            </p>
+            <ul class="plain-list">
+              <li>Best for support sessions and traffic diagnosis.</li>
+              <li>Explicit client retargeting, not transparent interception.</li>
+              <li>Observed-value webhooks are disabled by default.</li>
+            </ul>
+            <div class="tool-actions">
+              <a class="button primary" href="https://github.com/moosty-tr/Mitmi/releases/download/v0.1.0/mitmi-v0.1.0-win-x64.zip">Download</a>
+              <a class="button secondary" href="https://github.com/moosty-tr/Mitmi">Repository</a>
+            </div>
+          </article>
+
+          <article id="mitmi-scan" class="tool-card">
+            <div class="tool-topline">
+              <span class="tool-chip">Address scanner</span>
+              <span class="status ready">Field validated</span>
+            </div>
+            <h3>mitmi-scan</h3>
+            <p>
+              A read-only Modbus TCP address scanner for reverse engineering
+              undocumented devices one address at a time, with console, CSV, and
+              compact Markdown output.
+            </p>
+            <ul class="plain-list">
+              <li>Best for finding readable coils and registers.</li>
+              <li>Uses read-only Modbus functions only.</li>
+              <li>CSV keeps exhaustive evidence; Markdown stays compact.</li>
+            </ul>
+            <div class="tool-actions">
+              <a class="button primary" href="https://github.com/moosty-tr/mitmi-scan/releases/download/v0.1.0/mitmi-scan-v0.1.0-win-x64.zip">Download</a>
+              <a class="button secondary" href="https://github.com/moosty-tr/mitmi-scan">Repository</a>
+            </div>
+          </article>
+
+          <article id="mitmi-csv" class="tool-card">
+            <div class="tool-topline">
+              <span class="tool-chip">CSV bridge</span>
+              <span class="status partial">Simulator tested</span>
+            </div>
+            <h3>mitmi-csv</h3>
+            <p>
+              A localhost HTTP service that reads live Modbus TCP values and returns
+              plain CSV for tools that already know how to fetch a URL.
+            </p>
+            <ul class="plain-list">
+              <li>Best for Excel Power Query, Power BI, browsers, and scripts.</li>
+              <li>No database, history, UI, JSON API, polling, or writes.</li>
+              <li>Real-device validation remains device and site specific.</li>
+            </ul>
+            <div class="tool-actions">
+              <a class="button primary" href="https://github.com/moosty-tr/mitmi-csv/releases/download/v0.1.0/mitmi-csv-v0.1.0-win-x64.zip">Download</a>
+              <a class="button secondary" href="https://github.com/moosty-tr/mitmi-csv">Repository</a>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="downloads" class="downloads-section">
+        <div class="section-heading">
+          <p class="eyebrow">Downloads</p>
+          <h2>Self-contained Windows x64 archives.</h2>
+        </div>
+        <div class="download-table" role="table" aria-label="MITMI tool downloads">
+          <div class="table-row table-head" role="row">
+            <span role="columnheader">Tool</span>
+            <span role="columnheader">Archive</span>
+            <span role="columnheader">Release</span>
+          </div>
+          <div class="table-row" role="row">
+            <span role="cell">MITMI</span>
+            <a role="cell" href="https://github.com/moosty-tr/Mitmi/releases/download/v0.1.0/mitmi-v0.1.0-win-x64.zip">mitmi-v0.1.0-win-x64.zip</a>
+            <a role="cell" href="https://github.com/moosty-tr/Mitmi/releases/tag/v0.1.0">Notes</a>
+          </div>
+          <div class="table-row" role="row">
+            <span role="cell">mitmi-scan</span>
+            <a role="cell" href="https://github.com/moosty-tr/mitmi-scan/releases/download/v0.1.0/mitmi-scan-v0.1.0-win-x64.zip">mitmi-scan-v0.1.0-win-x64.zip</a>
+            <a role="cell" href="https://github.com/moosty-tr/mitmi-scan/releases/tag/v0.1.0">Notes</a>
+          </div>
+          <div class="table-row" role="row">
+            <span role="cell">mitmi-csv</span>
+            <a role="cell" href="https://github.com/moosty-tr/mitmi-csv/releases/download/v0.1.0/mitmi-csv-v0.1.0-win-x64.zip">mitmi-csv-v0.1.0-win-x64.zip</a>
+            <a role="cell" href="https://github.com/moosty-tr/mitmi-csv/releases/tag/v0.1.0">Notes</a>
+          </div>
+        </div>
+      </section>
+
+      <section id="validation" class="validation-section">
+        <div class="section-heading">
+          <p class="eyebrow">Validation state</p>
+          <h2>What has been proven, and where caution remains.</h2>
+        </div>
+        <div class="validation-grid">
+          <div>
+            <strong>MITMI</strong>
+            <p>
+              Test suite and release smoke passed. Existing field evidence covers
+              the Modbus TCP diagnostic proxy workflow. Webhook delivery remains
+              best-effort and disabled by default.
+            </p>
+          </div>
+          <div>
+            <strong>mitmi-scan</strong>
+            <p>
+              Test suite, release smoke, and approved Teletek fire alarm panel
+              validation passed for read-only address discovery.
+            </p>
+          </div>
+          <div>
+            <strong>mitmi-csv</strong>
+            <p>
+              Test suite and published-service smoke passed. The Modbus read path
+              is simulator-tested; validate against the actual device before a
+              field-ready claim.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>Licensed under Apache-2.0.</span>
+      <span>Built for narrow, inspectable Modbus TCP workflows.</span>
+    </footer>
+  </body>
+</html>
