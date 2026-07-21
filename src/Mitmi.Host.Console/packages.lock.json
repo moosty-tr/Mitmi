@@ -5,7 +5,7 @@
       "mitmi.application": {
         "type": "Project",
         "dependencies": {
-          "Mitmi.Domain": "[1.0.0, )"
+          "Mitmi.Domain": "[0.1.0, )"
         }
       },
       "mitmi.domain": {
@@ -14,8 +14,8 @@
       "mitmi.protocols.modbus": {
         "type": "Project",
         "dependencies": {
-          "Mitmi.Application": "[1.0.0, )",
-          "Mitmi.Domain": "[1.0.0, )",
+          "Mitmi.Application": "[0.1.0, )",
+          "Mitmi.Domain": "[0.1.0, )",
           "NModbus": "[3.0.83, )"
         }
       },
@@ -25,6 +25,7 @@
         "resolved": "3.0.83",
         "contentHash": "DLqEobLC168wE1t4xHyEEFfj/IkX2Kx7w8PaNgaipb/8B7DSHMUlXi/TLJfD8EYS5rN0ENInhyOCC5U0wadtuQ=="
       }
-    }
+    },
+    "net10.0/win-x64": {}
   }
 }

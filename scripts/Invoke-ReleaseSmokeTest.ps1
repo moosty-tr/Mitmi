@@ -84,7 +84,7 @@ function Get-PublishedMitmiCommand {
         [string]$PublishDirectory
     )
 
-    $windowsExe = Join-Path $PublishDirectory "Mitmi.Host.Console.exe"
+    $windowsExe = Join-Path $PublishDirectory "mitmi.exe"
     if (Test-Path -LiteralPath $windowsExe) {
         return [pscustomobject]@{
             FilePath = $windowsExe
@@ -92,7 +92,7 @@ function Get-PublishedMitmiCommand {
         }
     }
 
-    $unixExe = Join-Path $PublishDirectory "Mitmi.Host.Console"
+    $unixExe = Join-Path $PublishDirectory "mitmi"
     if (Test-Path -LiteralPath $unixExe) {
         return [pscustomobject]@{
             FilePath = $unixExe
@@ -100,11 +100,35 @@ function Get-PublishedMitmiCommand {
         }
     }
 
-    $dll = Join-Path $PublishDirectory "Mitmi.Host.Console.dll"
+    $dll = Join-Path $PublishDirectory "mitmi.dll"
     if (Test-Path -LiteralPath $dll) {
         return [pscustomobject]@{
             FilePath = "dotnet"
             PrefixArguments = @($dll)
+        }
+    }
+
+    $legacyWindowsExe = Join-Path $PublishDirectory "Mitmi.Host.Console.exe"
+    if (Test-Path -LiteralPath $legacyWindowsExe) {
+        return [pscustomobject]@{
+            FilePath = $legacyWindowsExe
+            PrefixArguments = @()
+        }
+    }
+
+    $legacyUnixExe = Join-Path $PublishDirectory "Mitmi.Host.Console"
+    if (Test-Path -LiteralPath $legacyUnixExe) {
+        return [pscustomobject]@{
+            FilePath = $legacyUnixExe
+            PrefixArguments = @()
+        }
+    }
+
+    $legacyDll = Join-Path $PublishDirectory "Mitmi.Host.Console.dll"
+    if (Test-Path -LiteralPath $legacyDll) {
+        return [pscustomobject]@{
+            FilePath = "dotnet"
+            PrefixArguments = @($legacyDll)
         }
     }
 

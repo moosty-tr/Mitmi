@@ -49,6 +49,14 @@ Run the release smoke test before handing a build to an operator:
 
 The smoke test publishes the console host to a clean temporary folder and runs the published executable through `--help`, `--init-config`, `--validate-config`, and `--bundle-diagnostics`.
 
+Build a local Windows x64 release archive:
+
+```text
+.\scripts\Publish-Release.ps1 -Version 0.1.0
+```
+
+The release script creates `artifacts/release/mitmi-v0.1.0-win-x64.zip`. By default the archive is self-contained and includes `mitmi.exe`, the README, Apache-2.0 license, third-party notices, and the example configuration.
+
 ## Quick Start
 
 Create a configuration file:
@@ -133,3 +141,7 @@ The accepted v0.1 architecture and implementation sequence are tracked in:
 - [Architecture decision records](docs/decisions)
 
 The Modbus protocol project owns Modbus-specific parsing and analyzer behavior. The application layer owns protocol-neutral session orchestration, configuration validation, capture contracts, metrics contracts, and bounded diagnostics policy.
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE).

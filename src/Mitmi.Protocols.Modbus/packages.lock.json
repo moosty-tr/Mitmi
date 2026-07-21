@@ -11,12 +11,13 @@
       "mitmi.application": {
         "type": "Project",
         "dependencies": {
-          "Mitmi.Domain": "[1.0.0, )"
+          "Mitmi.Domain": "[0.1.0, )"
         }
       },
       "mitmi.domain": {
         "type": "Project"
       }
-    }
+    },
+    "net10.0/win-x64": {}
   }
 }
